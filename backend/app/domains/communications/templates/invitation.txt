@@ -1,0 +1,12 @@
+Hello {{ recipient_name }},
+
+{{ inviter_name }} has invited you to join {{ tenant_name }} on TRANSPIRE.
+
+Set up your access to share observations, follow ideas, and help improvement move forward.
+
+{{ action_label }}: {{ action_url }}
+
+This invitation expires in {{ expires_in }}. If you were not expecting it, you can safely ignore this email.
+
+Ideate. Transform. Inspire.
+Transform ideas. Inspire progress.

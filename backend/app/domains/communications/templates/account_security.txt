@@ -1,0 +1,12 @@
+Hello {{ recipient_name }},
+
+TRANSPIRE recorded the following activity for your {{ tenant_name }} account:
+
+{{ event_description }}
+{{ event_time }}
+
+If this was you, no action is required. If you do not recognise this activity, secure your account immediately:
+{{ action_url }}
+
+Ideate. Transform. Inspire.
+Transform ideas. Inspire progress.

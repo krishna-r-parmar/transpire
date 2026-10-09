@@ -1,0 +1,53 @@
+.navigation {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: .38rem;
+}
+
+.navigation > .route {
+  display: inline-flex;
+  min-height: 2.5rem;
+  align-items: center;
+  gap: .35rem;
+  border: 1px solid oklch(84% .028 242);
+  border-radius: .25rem;
+  padding: .55rem .78rem;
+  background: oklch(98% .008 242);
+  color: oklch(31% .05 250);
+  font-size: .78rem;
+  font-weight: 760;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: border-color 160ms ease-out, background 160ms ease-out, color 160ms ease-out;
+}
+
+.navigation > .route[data-active="true"] {
+  border-color: oklch(51% .13 242);
+  background: oklch(45% .12 242);
+  color: oklch(98% .006 242);
+  box-shadow: 0 4px 12px oklch(38% .1 242 / .16);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .navigation > .route:hover {
+    border-color: oklch(68% .065 242);
+    background: oklch(94% .025 242);
+    color: oklch(28% .08 245);
+  }
+
+  .navigation > .route[data-active="true"]:hover { background: oklch(40% .12 242); color: oklch(98% .006 242); }
+}
+
+@media (max-width: 72rem) {
+  .navigation {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navigation > .route {
+    transition: none;
+  }
+}

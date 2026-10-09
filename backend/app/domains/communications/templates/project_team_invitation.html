@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block preheader %}You have been invited to join project {{ project_reference }} in TRANSPIRE.{% endblock %}
+{% block eyebrow %}Project team invitation · {{ project_reference }}{% endblock %}
+{% block title %}You have been invited to the project team.{% endblock %}
+{% block content %}
+  <p style="margin:0 0 18px;">Hello {{ recipient_name }},</p>
+  <p style="margin:0 0 18px;">You have been named as a team member for an improvement project in {{ tenant_name }}. The charter has been submitted and the execution baseline is ready.</p>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:4px 0 20px;background:#eef5f8;border:1px solid #d3e1e8;">
+    <tr><td style="padding:14px 16px 4px;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#647d90;">Project</td></tr>
+    <tr><td style="padding:0 16px 4px;font-size:18px;font-weight:800;color:#006fae;">{{ project_reference }}</td></tr>
+    <tr><td style="padding:0 16px 4px;font-size:15px;color:#243d52;">{{ project_title }}</td></tr>
+    <tr><td style="padding:0 16px 15px;font-size:13px;color:#647d90;">Project Lead: {{ project_lead }}</td></tr>
+  </table>
+  <p style="margin:0;">Open TRANSPIRE to review the project. Your invitation does not delay or block charter submission.</p>
+{% endblock %}

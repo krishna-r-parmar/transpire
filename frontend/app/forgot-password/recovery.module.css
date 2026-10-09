@@ -1,0 +1,40 @@
+.form { display: grid; gap: 1.25rem; }
+.field { display: grid; gap: .48rem; }
+.field label { font-size: .78rem; font-weight: 760; }
+.field input { width: 100%; min-height: 3.35rem; border: 1px solid var(--line, oklch(86% .02 242)); border-radius: .25rem; padding: .8rem .95rem; outline: none; background: oklch(98.5% .006 240); color: oklch(22% .047 253); font-size: .92rem; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.field input:focus { border-color: oklch(59.157% .14157 242.451); box-shadow: 0 0 0 3px oklch(59% .14 242 / .14); }
+.field[data-invalid="true"] input { border-color: oklch(53% .19 25); background: oklch(97% .015 25); }
+.error { margin: 0; color: oklch(53% .19 25); font-size: .72rem; line-height: 1.4; }
+.passwordWrap { position: relative; }
+.passwordWrap input { padding-right: 3.7rem; }
+.passwordToggle { position: absolute; top: 50%; right: .55rem; display: grid; width: 2.45rem; height: 2.35rem; cursor: pointer; border: 0; border-radius: .2rem; background: transparent; color: oklch(45% .12 242); transform: translateY(-50%); place-items: center; }
+.submit { position: relative; display: inline-flex; width: 100%; min-height: 3.4rem; cursor: pointer; align-items: center; justify-content: center; gap: .7rem; border: 1px solid oklch(59.157% .14157 242.451); border-radius: .25rem; padding: .8rem 1rem; background: oklch(59.157% .14157 242.451); color: oklch(98.5% .006 240); font-size: .86rem; font-weight: 770; transition: background-color 160ms ease, transform 160ms cubic-bezier(.16, 1, .3, 1); }
+.submit:disabled { cursor: wait; opacity: .72; }
+.submit i { width: 1rem; height: 1rem; border: 2px solid oklch(97% .01 240 / .35); border-top-color: oklch(98.5% .006 240); border-radius: 50%; animation: spin .7s linear infinite; }
+.support { margin: .2rem 0 0; color: oklch(48% .025 248); font-size: .7rem; line-height: 1.5; }
+.status { display: grid; gap: .8rem; border: 1px solid oklch(78% .06 242); padding: 1.15rem; background: oklch(95.5% .018 242); }
+.status[data-tone="error"] { border-color: oklch(78% .07 25); background: oklch(97% .018 25); }
+.statusIcon { display: grid; width: 2.3rem; height: 2.3rem; border-radius: 50%; background: oklch(88% .06 242); color: oklch(42% .12 242); place-items: center; }
+.status[data-tone="error"] .statusIcon { background: oklch(91% .045 25); color: oklch(50% .17 25); }
+.status h2 { margin: 0; font-size: 1rem; letter-spacing: -.02em; }
+.status p { margin: .35rem 0 0; color: oklch(43% .035 248); font-size: .76rem; line-height: 1.55; }
+.status a { width: fit-content; color: oklch(45% .12 242); font-size: .75rem; font-weight: 760; }
+.status a { display: inline-flex; align-items: center; gap: .4rem; }
+.statusIcon i { width: 1rem; height: 1rem; border: 2px solid oklch(66% .07 242); border-top-color: oklch(42% .12 242); border-radius: 50%; animation: spin .7s linear infinite; }
+.invitationSummary { border-top: 1px solid var(--line, oklch(86% .02 242)); border-bottom: 1px solid var(--line, oklch(86% .02 242)); padding: 1.1rem 0; }
+.invitationSummary span { display: block; color: oklch(48% .025 248); font-size: .66rem; font-weight: 760; letter-spacing: .06em; text-transform: uppercase; }
+.invitationSummary strong { display: block; margin-top: .35rem; font-size: 1rem; }
+.invitationSummary p { margin: .3rem 0 0; color: oklch(48% .025 248); font-size: .74rem; overflow-wrap: anywhere; }
+.passwordHint { margin: -.15rem 0 0; color: oklch(48% .025 248); font-size: .7rem; }
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (hover: hover) and (pointer: fine) {
+  .submit:hover:not(:disabled) { background: oklch(45% .12 242); transform: translateY(-1px); }
+  .passwordToggle:hover { background: oklch(94% .02 242); }
+  .status a:hover { color: oklch(59.157% .14157 242.451); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .submit i { animation: none; }
+}

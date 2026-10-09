@@ -1,0 +1,85 @@
+.selectField { position: relative; display: grid; gap: .42rem; min-width: 0; }
+.selectField > label { font-size: .7rem; font-weight: 760; }
+.selectTrigger { display: flex; width: 100%; min-height: 3rem; cursor: pointer; align-items: center; justify-content: space-between; gap: .75rem; border: 1px solid oklch(84% .025 242); border-radius: .25rem; padding: .55rem .7rem .55rem .8rem; outline: none; background: oklch(98.5% .006 240); color: oklch(22% .047 253); text-align: left; transition: border-color 160ms ease-out, box-shadow 160ms ease-out, background 160ms ease-out; }
+.selectTrigger span { display: grid; gap: .1rem; min-width: 0; }
+.selectTrigger strong { overflow: hidden; font-size: .76rem; text-overflow: ellipsis; white-space: nowrap; }
+.selectTrigger small { color: oklch(50% .025 248); font-size: .62rem; font-weight: 520; }
+.selectTrigger svg { flex: 0 0 auto; color: oklch(48% .035 248); transition: transform 180ms cubic-bezier(.16,1,.3,1); }
+.selectTrigger[aria-expanded="true"] { border-color: oklch(59.157% .14157 242.451); box-shadow: 0 0 0 3px oklch(59% .14 242 / .13); }
+.selectTrigger[aria-invalid="true"] { border-color: oklch(53% .19 25); background: oklch(97% .015 25); box-shadow: 0 0 0 3px oklch(53% .19 25 / .12); }
+.selectTrigger[aria-expanded="true"] svg { transform: rotate(180deg); }
+.selectTrigger:disabled { cursor: not-allowed; opacity: .55; }
+.selectMenu { position: absolute; z-index: 30; top: calc(100% + .45rem); right: 0; left: 0; visibility: hidden; overflow: hidden; border: 1px solid oklch(82% .025 242); border-radius: .4rem; padding: .38rem; opacity: 0; background: oklch(98% .008 242); box-shadow: 0 1.1rem 2.8rem oklch(25% .04 250 / .16); transform: translateY(-.35rem); transition: opacity 160ms ease-out, transform 160ms cubic-bezier(.16,1,.3,1), visibility 160ms; }
+.selectMenu[data-open="true"] { visibility: visible; opacity: 1; transform: translateY(0); }
+.selectMenu button { display: flex; width: 100%; min-height: 2.75rem; cursor: pointer; align-items: center; justify-content: space-between; gap: .75rem; border: 0; border-radius: .25rem; padding: .55rem .65rem; outline: none; background: transparent; color: oklch(25% .04 250); text-align: left; }
+.selectMenu button span { display: grid; gap: .12rem; }
+.selectMenu button strong { font-size: .72rem; }
+.selectMenu button small { color: oklch(50% .025 248); font-size: .62rem; }
+.selectMenu button svg { color: oklch(59.157% .14157 242.451); }
+.selectMenu button:hover, .selectMenu button:focus-visible, .selectMenu button[aria-selected="true"] { background: oklch(93.5% .022 242); }
+.selectOptions { max-height: min(14rem, calc(100svh - 12rem)); overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.selectOptions > p { margin: 0; padding: 1rem .65rem; color: oklch(50% .025 248); font-size: .66rem; text-align: center; }
+
+.searchableSelect { position: relative; display: grid; gap: .42rem; min-width: 0; }
+.searchableSelect > label { font-size: .7rem; font-weight: 760; }
+.selectEnd { display: flex !important; grid-auto-flow: column; align-items: center; gap: .45rem; }
+.selectEnd i, .searchableOptions i { border-radius: 999px; padding: .18rem .38rem; background: oklch(91% .025 242); color: oklch(44% .075 242); font-size: .55rem; font-style: normal; font-weight: 790; text-transform: capitalize; }
+.selectEnd i[data-status="pending"], .searchableOptions i[data-status="pending"] { background: oklch(93% .035 80); color: oklch(46% .09 70); }
+.searchableMenu { position: absolute; z-index: 35; top: calc(100% + .45rem); right: 0; left: 0; visibility: hidden; overflow: hidden; border: 1px solid oklch(82% .025 242); border-radius: .42rem; padding: .38rem; opacity: 0; background: oklch(98% .008 242); box-shadow: 0 1.1rem 2.8rem oklch(25% .04 250 / .16); transform: translateY(-.35rem); transition: opacity 160ms ease-out, transform 160ms cubic-bezier(.16,1,.3,1), visibility 160ms; }
+.searchableMenu[data-open="true"] { visibility: visible; opacity: 1; transform: translateY(0); }
+.optionSearch { display: flex; min-height: 2.55rem; align-items: center; gap: .45rem; border: 1px solid oklch(83% .025 242); border-radius: .28rem; margin-bottom: .3rem; padding: 0 .6rem; background: oklch(96% .009 242); }
+.optionSearch:focus-within { border-color: oklch(59.157% .14157 242.451); box-shadow: 0 0 0 3px oklch(59% .14 242 / .12); }
+.optionSearch svg { flex: 0 0 auto; color: oklch(50% .03 248); }
+.optionSearch input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: oklch(24% .045 250); font-size: .7rem; }
+.optionSearch input::-webkit-search-cancel-button { display: none; }
+.searchableOptions { max-height: 14rem; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.searchableOptions button { display: grid; width: 100%; min-height: 3.15rem; cursor: pointer; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: .55rem; border: 0; border-radius: .25rem; padding: .5rem .55rem; outline: none; background: transparent; color: oklch(25% .04 250); text-align: left; }
+.searchableOptions button:hover, .searchableOptions button:focus-visible, .searchableOptions button[aria-selected="true"] { background: oklch(93.5% .022 242); }
+.searchableOptions button > span:nth-child(2) { display: grid; gap: .1rem; min-width: 0; }
+.searchableOptions button strong, .searchableOptions button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.searchableOptions button strong { font-size: .7rem; }
+.searchableOptions button small { color: oklch(50% .025 248); font-size: .6rem; }
+.searchableOptions button > svg { color: oklch(59.157% .14157 242.451); }
+.searchableOptions > p { margin: 0; padding: 1rem .65rem; color: oklch(50% .025 248); font-size: .66rem; text-align: center; }
+.personGlyph { display: grid !important; width: 1.8rem; height: 1.8rem; place-items: center; border-radius: 50%; background: oklch(91.5% .025 242); color: oklch(45% .09 242); }
+
+.searchField { display: flex; min-width: min(100%, 18rem); align-items: center; gap: .65rem; }
+.searchField > label { position: absolute; overflow: hidden; width: 1px; height: 1px; clip: rect(0 0 0 0); white-space: nowrap; }
+.searchField > div { display: flex; min-width: 13rem; min-height: 2.65rem; flex: 1; align-items: center; gap: .48rem; border: 1px solid oklch(84% .025 242); border-radius: .3rem; padding: 0 .55rem 0 .7rem; background: oklch(98.5% .006 240); transition: border-color 160ms ease-out, box-shadow 160ms ease-out; }
+.searchField > div:focus-within { border-color: oklch(59.157% .14157 242.451); box-shadow: 0 0 0 3px oklch(59% .14 242 / .12); }
+.searchField svg { flex: 0 0 auto; color: oklch(51% .03 248); }
+.searchField input { min-width: 0; flex: 1; border: 0; outline: 0; background: transparent; color: oklch(24% .045 250); font-size: .72rem; }
+.searchField input::placeholder { color: oklch(57% .025 248); }
+.searchField input::-webkit-search-cancel-button { display: none; }
+.searchField button { display: grid; width: 1.8rem; height: 1.8rem; cursor: pointer; place-items: center; border: 0; border-radius: .2rem; background: transparent; }
+.searchField button:hover, .searchField button:focus-visible { outline: none; background: oklch(92.5% .022 242); }
+.searchField > span { min-width: max-content; color: oklch(50% .025 248); font-size: .64rem; font-weight: 680; }
+
+.dialogLayer { position: fixed; z-index: 100; inset: 0; display: grid; place-items: center; padding: 1.25rem; background: oklch(18% .025 250 / .58); animation: veilIn 160ms ease-out both; }
+.dialog { position: relative; display: grid; width: min(30rem, 100%); grid-template-columns: auto 1fr; gap: 0 1rem; border: 1px solid oklch(80% .025 242); border-radius: .65rem; padding: 1.35rem; background: oklch(98.5% .006 240); color: oklch(22% .047 253); box-shadow: 0 2rem 5rem oklch(18% .035 250 / .28); animation: dialogIn 200ms cubic-bezier(.16,1,.3,1) both; }
+.dialogIcon { display: grid; width: 2.4rem; height: 2.4rem; place-items: center; border-radius: 50%; background: oklch(92% .035 25); color: oklch(50% .17 25); }
+.dialog[data-tone="default"] .dialogIcon { background: oklch(91% .035 242); color: oklch(48% .14 242); }
+.dialogClose { position: absolute; top: .75rem; right: .75rem; display: grid; width: 2.2rem; height: 2.2rem; cursor: pointer; place-items: center; border: 0; border-radius: .25rem; background: transparent; color: oklch(48% .025 248); }
+.dialogClose:hover, .dialogClose:focus-visible { outline: none; background: oklch(93.5% .018 242); color: oklch(25% .04 250); }
+.dialogCopy { min-width: 0; padding-right: 1.8rem; }
+.dialogCopy p { margin: 0 0 .28rem; color: oklch(50% .12 25); font-size: .61rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.dialog[data-tone="default"] .dialogCopy p { color: oklch(48% .12 242); }
+.dialogCopy h2 { margin: 0; font-size: 1.05rem; letter-spacing: -.025em; }
+.dialogCopy span { display: block; max-width: 58ch; margin-top: .55rem; color: oklch(46% .03 248); font-size: .75rem; line-height: 1.55; }
+.confirmationField { display: grid; grid-column: 1 / -1; gap: .48rem; margin-top: 1.2rem; color: oklch(43% .035 248); font-size: .7rem; }
+.confirmationField strong { color: oklch(28% .05 250); }
+.confirmationField input { min-height: 2.8rem; border: 1px solid oklch(82% .03 242); border-radius: .3rem; padding: .65rem .75rem; outline: none; background: oklch(96% .009 242); color: oklch(22% .047 253); font: inherit; }
+.confirmationField input:focus { border-color: oklch(59.157% .14157 242.451); box-shadow: 0 0 0 3px oklch(59% .14 242 / .13); }
+.dialogActions { display: flex; grid-column: 1 / -1; justify-content: flex-end; gap: .55rem; margin-top: 1.35rem; }
+.dialogActions button { min-height: 2.65rem; cursor: pointer; border: 1px solid oklch(82% .025 242); border-radius: .28rem; padding: .55rem .8rem; background: transparent; color: oklch(32% .04 250); font-size: .7rem; font-weight: 760; }
+.dialogActions button[data-tone="danger"] { border-color: oklch(51% .16 25); background: oklch(51% .16 25); color: oklch(97.5% .008 25); }
+.dialogActions button[data-tone="default"] { border-color: oklch(59.157% .14157 242.451); background: oklch(59.157% .14157 242.451); color: oklch(98% .008 242); }
+.dialogActions button:disabled { cursor: not-allowed; opacity: .48; }
+.dialogActions button:focus-visible { outline: 3px solid oklch(59% .14 242 / .2); outline-offset: 2px; }
+
+@keyframes veilIn { from { opacity: 0; } }
+@keyframes dialogIn { from { opacity: 0; transform: translateY(.5rem) scale(.985); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .selectTrigger svg, .selectMenu, .searchableMenu, .dialogLayer, .dialog { animation: none; transition: none; }
+}

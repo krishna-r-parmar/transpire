@@ -1,0 +1,5 @@
+.link { position: relative; display: inline-flex; width: 2.6rem; height: 2.6rem; align-items: center; justify-content: center; border: 1px solid oklch(84% .028 242); border-radius: 50%; background: oklch(98% .008 242); color: oklch(31% .05 250); text-decoration: none; transition: border-color 160ms ease-out, background 160ms ease-out, color 160ms ease-out; }
+.link[data-active="true"] { border-color: oklch(51% .13 242); background: oklch(45% .12 242); color: oklch(98% .006 242); }
+.link span { position: absolute; top: -.3rem; right: -.3rem; display: grid; min-width: 1.15rem; height: 1.15rem; place-items: center; border: 2px solid oklch(98% .008 242); border-radius: 999px; padding: 0 .24rem; background: oklch(55% .2 25); color: oklch(98% .006 242); font-size: .55rem; font-weight: 850; font-variant-numeric: tabular-nums; }
+@media (hover: hover) and (pointer: fine) { .link:hover { border-color: oklch(68% .065 242); background: oklch(94% .025 242); color: oklch(28% .08 245); } }
+@media (prefers-reduced-motion: reduce) { .link { transition: none; } }

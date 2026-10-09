@@ -1,0 +1,47 @@
+.page {
+  --blue: oklch(59.157% .14157 242.451);
+  --blue-deep: oklch(45% .12 242);
+  --red: oklch(62.236% .22144 23.472);
+  --ink: oklch(22% .047 253);
+  --muted: oklch(48% .025 248);
+  --paper: oklch(98.5% .006 240);
+  --mist: oklch(95.5% .014 242);
+  --line: oklch(86% .02 242);
+  display: grid;
+  min-height: 100svh;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.formSide { display: grid; min-height: 100svh; padding: 0 clamp(1.25rem, 5vw, 4.5rem); grid-template-rows: auto 1fr auto; }
+.header { display: flex; min-height: 6.4rem; align-items: center; justify-content: space-between; gap: 1.5rem; border-bottom: 1px solid var(--line); }
+.brand { display: inline-flex; width: 12.5rem; }
+.brand img { width: 100%; height: auto; }
+.header > a:last-child { color: var(--blue-deep); font-size: .76rem; font-weight: 750; }
+.formShell { width: 100%; max-width: 28rem; align-self: center; justify-self: center; padding: clamp(3.5rem, 9vh, 6rem) 0; }
+.intro { margin-bottom: 2rem; }
+.intro > p { margin: 0 0 .8rem; color: var(--blue-deep); font-size: .68rem; font-weight: 820; letter-spacing: .11em; text-transform: uppercase; }
+.intro h1 { max-width: 12ch; margin: 0; font-size: 2.35rem; font-weight: 750; letter-spacing: -.05em; line-height: 1.05; text-wrap: balance; }
+.intro > span { display: block; max-width: 42ch; margin-top: .85rem; color: var(--muted); font-size: .9rem; line-height: 1.6; }
+.legal { margin: 0; padding: 1.3rem 0; color: oklch(59% .018 246); font-size: .66rem; text-align: center; }
+
+.visual { position: relative; display: none; min-height: 100svh; overflow: hidden; background: oklch(18% .065 250); color: oklch(96% .012 242); isolation: isolate; }
+.visualTexture { position: absolute; z-index: -2; inset: 0; background: linear-gradient(0deg, oklch(11% .055 254 / .9), oklch(16% .05 252 / .22)), url("/brand/transpire-v2-background.png") 52% center / cover; opacity: .86; }
+.visual::after { position: absolute; z-index: -1; top: 0; right: 24%; width: 1px; height: 100%; background: linear-gradient(transparent, oklch(72% .11 242 / .65), transparent); content: ""; }
+.visualCopy { position: absolute; right: clamp(2rem, 6vw, 5.5rem); bottom: clamp(12rem, 27vh, 19rem); left: clamp(2rem, 6vw, 5.5rem); max-width: 31rem; }
+.lock { display: grid; width: 2.8rem; height: 2.8rem; margin-bottom: 1.8rem; border: 1px solid oklch(82% .08 242 / .55); border-radius: 50%; background: oklch(45% .12 242 / .25); color: oklch(82% .1 242); place-items: center; }
+.visualCopy > p { max-width: 16ch; margin: 0; font-size: clamp(2.2rem, 4vw, 4.4rem); font-weight: 720; letter-spacing: -.06em; line-height: .98; text-wrap: balance; }
+.visualCopy ol { display: grid; gap: .85rem; margin: 2.4rem 0 0; padding: 0; list-style: none; }
+.visualCopy li { display: flex; align-items: center; gap: .7rem; color: oklch(84% .025 242); font-size: .78rem; font-weight: 680; }
+.visualCopy li svg { color: oklch(76% .12 242); }
+.motto { position: absolute; right: clamp(2rem, 6vw, 5.5rem); bottom: 3.2rem; left: clamp(2rem, 6vw, 5.5rem); display: grid; gap: .2rem; font-size: .75rem; }
+.motto span { color: oklch(77% .12 242); font-weight: 780; }
+
+@media (min-width: 64rem) {
+  .page { grid-template-columns: minmax(34rem, .92fr) minmax(30rem, 1.08fr); }
+  .visual { display: block; }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .header > a:last-child:hover { color: var(--blue); }
+}

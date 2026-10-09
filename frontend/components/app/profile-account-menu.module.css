@@ -1,0 +1,22 @@
+.account { position: relative; flex: 0 0 auto; }
+.trigger { display: grid; min-width: 13rem; min-height: 3.1rem; cursor: pointer; align-items: center; gap: .6rem; border: 1px solid oklch(82% .035 242); border-radius: 999px; padding: .3rem .55rem .3rem .35rem; background: oklch(98% .008 242); color: oklch(27% .05 250); text-align: left; grid-template-columns: auto minmax(0, 1fr) auto; transition: border-color 170ms ease-out, background 170ms ease-out, box-shadow 170ms ease-out; }
+.trigger[data-active="true"], .trigger[aria-expanded="true"] { border-color: oklch(54% .12 242); background: oklch(94% .025 242); box-shadow: 0 0 0 3px oklch(66% .09 242 / .14); }
+.trigger > span { display: grid; min-width: 0; gap: .08rem; }
+.trigger strong, .trigger small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.trigger strong { font-size: .7rem; } .trigger small { max-width: 10.5rem; color: oklch(50% .025 248); font-size: .61rem; }
+.trigger > svg { color: oklch(48% .035 248); transition: transform 180ms cubic-bezier(.16,1,.3,1); }
+.trigger[aria-expanded="true"] > svg { transform: rotate(180deg); }
+.menu { position: absolute; z-index: 30; top: calc(100% + .55rem); right: 0; display: grid; visibility: hidden; width: 19rem; gap: .4rem; border: 1px solid oklch(82% .035 242); border-radius: .55rem; padding: .65rem; background: oklch(98.5% .006 242); box-shadow: 0 1.1rem 2.7rem oklch(25% .055 250 / .17); opacity: 0; transform: translateY(-.25rem); transition: opacity 170ms cubic-bezier(.16,1,.3,1), transform 170ms cubic-bezier(.16,1,.3,1), visibility 170ms; }
+.menu[data-open="true"] { visibility: visible; opacity: 1; transform: translateY(0); }
+.menu > div:first-child { display: grid; align-items: center; gap: .65rem; border-bottom: 1px solid oklch(87% .02 242); padding: .35rem .35rem .75rem; grid-template-columns: auto 1fr; }
+.menu p { display: grid; min-width: 0; margin: 0; gap: .1rem; } .menu p strong, .menu p small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .menu p strong { font-size: .74rem; } .menu p small { color: oklch(50% .025 248); font-size: .63rem; }
+.menu > a, .menu > button { display: grid; min-height: 3.4rem; cursor: pointer; align-items: center; gap: .65rem; border: 1px solid transparent; border-radius: .3rem; padding: .55rem .65rem; background: transparent; color: oklch(31% .05 250); text-align: left; text-decoration: none; grid-template-columns: auto 1fr; }
+.menu > a span, .menu > button span { display: grid; gap: .1rem; } .menu > a strong, .menu > button strong { font-size: .7rem; } .menu > a small, .menu > button small { color: oklch(50% .025 248); font-size: .62rem; }
+.menu > button { width: 100%; font: inherit; }
+.workspaces { display: grid !important; gap: .35rem !important; border-block: 1px solid oklch(87% .02 242); padding: .6rem .25rem !important; }
+.workspaces > span { display: inline-flex; align-items: center; gap: .35rem; color: oklch(50% .025 248); font-size: .61rem; font-weight: 760; text-transform: uppercase; }
+.workspaces > a, .workspaces > strong { display: grid; gap: .1rem; border-radius: .25rem; padding: .45rem .5rem; color: oklch(31% .05 250); font-size: .69rem; text-decoration: none; }
+.workspaces > strong { background: oklch(94% .025 242); }
+.workspaces small { color: oklch(50% .025 248); font-size: .59rem; font-weight: 500; }
+@media (hover: hover) and (pointer: fine) { .trigger:hover, .menu > a:hover, .menu > button:hover { border-color: oklch(79% .045 242); background: oklch(94.5% .018 242); } }
+@media (prefers-reduced-motion: reduce) { .trigger, .trigger > svg, .menu { transition: none; } }

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light only">
+    <title>{{ subject }}</title>
+    <style>
+      @media only screen and (max-width: 640px) {
+        .email-shell { width: 100% !important; }
+        .email-pad { padding-left: 24px !important; padding-right: 24px !important; }
+        .email-title { font-size: 30px !important; line-height: 36px !important; }
+        .email-action { width: 100% !important; }
+        .email-brand-note { display: none !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background:#edf3f7;color:#13263d;font-family:Aptos,'Segoe UI',Arial,sans-serif;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">
+      {% block preheader %}{% endblock %}
+    </div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#edf3f7;">
+      <tr>
+        <td align="center" style="padding:36px 16px;">
+          <table class="email-shell" role="presentation" width="600" cellspacing="0" cellpadding="0" border="0" style="width:600px;max-width:600px;background:#fafdff;border:1px solid #d8e3eb;border-collapse:separate;">
+            <tr>
+              <td class="email-pad" style="padding:30px 42px 26px;border-top:4px solid #0085ca;border-bottom:1px solid #d8e3eb;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td>
+                      <img src="{{ logo_url }}" width="260" alt="TRANSPIRE — Ideate. Transform. Inspire." style="display:block;width:260px;max-width:100%;height:auto;border:0;">
+                    </td>
+                    <td class="email-brand-note" align="right" style="font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;color:#587084;">
+                      Transform ideas. Inspire progress.
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td class="email-pad" style="padding:46px 42px 20px;">
+                <p style="margin:0 0 14px;font-size:12px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:#0076b5;">
+                  {% block eyebrow %}TRANSPIRE update{% endblock %}
+                </p>
+                <h1 class="email-title" style="margin:0;font-size:38px;line-height:44px;letter-spacing:-1.5px;color:#0c2340;">
+                  {% block title %}{% endblock %}
+                </h1>
+              </td>
+            </tr>
+            <tr>
+              <td class="email-pad" style="padding:4px 42px 14px;font-size:16px;line-height:26px;color:#344b60;">
+                {% block content %}{% endblock %}
+              </td>
+            </tr>
+            {% if action_url and action_label %}
+            <tr>
+              <td class="email-pad" style="padding:18px 42px 42px;">
+                <table class="email-action" role="presentation" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td align="center" bgcolor="#006fae" style="background:#006fae;">
+                      <a href="{{ action_url }}" style="display:inline-block;padding:15px 24px;color:#fafdff;font-size:15px;font-weight:800;line-height:20px;text-decoration:none;">
+                        {{ action_label }}
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+                <p style="margin:18px 0 0;font-size:12px;line-height:19px;color:#6a7f91;word-break:normal;overflow-wrap:normal;">
+                  If the button does not work, copy this address into your browser:<br>
+                  <a href="{{ action_url }}" style="color:#006fae;word-break:break-all;">{{ action_url }}</a>
+                </p>
+              </td>
+            </tr>
+            {% endif %}
+            <tr>
+              <td class="email-pad" style="padding:26px 42px;background:#0c2340;color:#d8e5ee;">
+                <p style="margin:0 0 5px;font-size:14px;font-weight:800;color:#fafdff;">Ideate. Transform. Inspire.</p>
+                <p style="margin:0 0 20px;font-size:13px;color:#a9bfd0;">Transform ideas. Inspire progress.</p>
+                <p style="margin:0;font-size:11px;line-height:18px;color:#829caf;">
+                  This is an automated operational message from TRANSPIRE{% if tenant_name %} for {{ tenant_name }}{% endif %}. Please do not reply.
+                </p>
+                <p style="margin:7px 0 0;font-size:11px;color:#829caf;">© {{ current_year }} TRANSPIRE</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

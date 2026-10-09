@@ -1,0 +1,5 @@
+.notice { display: flex; min-height: 2.8rem; align-items: center; justify-content: space-between; gap: .8rem; border: 1px solid oklch(82% .035 242); border-radius: .32rem; margin: 0 0 .85rem; padding: .58rem .58rem .58rem .8rem; background: oklch(94% .022 242); color: oklch(39% .09 242); }
+.notice[data-tone="error"] { border-color: oklch(84% .04 25); background: oklch(95% .022 25); color: oklch(48% .15 25); }
+.notice p { margin: 0; font-size: .7rem; line-height: 1.45; }
+.notice button { display: grid; width: 2rem; height: 2rem; flex: 0 0 auto; cursor: pointer; place-items: center; border: 0; border-radius: .24rem; outline: none; background: transparent; color: currentColor; }
+.notice button:hover, .notice button:focus-visible { background: oklch(50% .03 245 / .1); box-shadow: 0 0 0 2px oklch(59% .14 242 / .14); }

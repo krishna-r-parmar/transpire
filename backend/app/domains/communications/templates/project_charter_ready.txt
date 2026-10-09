@@ -1,0 +1,12 @@
+Hello {{ recipient_name }},
+
+Your idea {{ idea_reference }} is fully approved.
+
+{{ idea_title }}
+
+TRANSPIRE has opened the project charter so you can define ownership, timing, scope, team, KPI, and approved investment.
+
+Complete the project charter: {{ action_url }}
+
+Ideate. Transform. Inspire.
+Transform ideas. Inspire progress.

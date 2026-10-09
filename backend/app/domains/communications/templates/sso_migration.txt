@@ -1,0 +1,12 @@
+Hello {{ recipient_name }},
+
+{{ tenant_name }} moved TRANSPIRE access to Microsoft SSO on {{ effective_time }}.
+
+Use the Microsoft account matching this work email when you next sign in. Your ideas, projects, approvals, roles, and history are unchanged.
+
+Sign in: {{ action_url }}
+
+If Microsoft does not recognise your account, contact your organisation's TRANSPIRE administrator.
+
+Ideate. Transform. Inspire.
+Transform ideas. Inspire progress.

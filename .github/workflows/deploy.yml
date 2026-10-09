@@ -1,0 +1,205 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      commit_sha:
+        description: "Full commit SHA to deploy or roll back to. Leave empty to deploy the selected branch head."
+        required: false
+        default: ""
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment: production
+    defaults:
+      run:
+        shell: bash
+    env:
+      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+      APP_DIR: ${{ vars.APP_DIR || '/opt/transpire' }}
+    steps:
+      - id: tag
+        env:
+          TAG: ${{ inputs.commit_sha || github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          if [[ ! "$TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Commit must be a full 40-character SHA, got '$TAG'"
+            exit 1
+          fi
+          echo "value=$TAG" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.value }}
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          role-session-name: transpire-deploy
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Install Session Manager plugin
+        run: |
+          curl -fsSL -o /tmp/session-manager-plugin.deb \
+            https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb
+          sudo dpkg -i /tmp/session-manager-plugin.deb
+
+      - name: Configure SSH over SSM
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          ssh-keygen -q -t ed25519 -N '' -C "gha-${GITHUB_RUN_ID}" -f ~/.ssh/ec2_ephemeral
+          cat > ~/.ssh/config <<CONFIG
+          Host transpire
+            HostName ${EC2_INSTANCE_ID}
+            User ubuntu
+            IdentityFile ~/.ssh/ec2_ephemeral
+            IdentitiesOnly yes
+            ProxyCommand aws ssm start-session --region ${AWS_REGION} --target %h --document-name AWS-StartSSHSession --parameters portNumber=%p
+            StrictHostKeyChecking accept-new
+            UserKnownHostsFile ~/.ssh/known_hosts_transpire
+            ControlMaster auto
+            ControlPath ~/.ssh/cm-%C
+            ControlPersist 30m
+            ServerAliveInterval 30
+            ServerAliveCountMax 6
+          CONFIG
+          chmod 600 ~/.ssh/config
+
+      - name: Check whether the images are already on the server
+        id: images
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          .github/scripts/ec2-ssh-open.sh
+          if ssh transpire "docker image inspect transpire-backend:$TAG transpire-frontend:$TAG" >/dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+            echo "Images for $TAG are already on the server; skipping build."
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.images.outputs.present != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        if: steps.images.outputs.present != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          load: true
+          tags: transpire-backend:${{ steps.tag.outputs.value }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build frontend image
+        if: steps.images.outputs.present != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          load: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=https://${{ vars.APP_DOMAIN }}/api/v1
+          tags: transpire-frontend:${{ steps.tag.outputs.value }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+
+      - name: Push images to the server
+        if: steps.images.outputs.present != 'true'
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          .github/scripts/ec2-ssh-open.sh
+          docker save "transpire-backend:$TAG" "transpire-frontend:$TAG" | gzip -1 \
+            | ssh transpire "gunzip | docker load"
+
+      - name: Push deploy files to the server
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          .github/scripts/ec2-ssh-open.sh
+          git archive --format=tar "$TAG" deploy | ssh transpire "mkdir -p '$APP_DIR' && tar -x -C '$APP_DIR'"
+
+      - name: Write backend settings on the server
+        env:
+          # Each setting may be an environment secret or variable; secrets win.
+          # Unset optional settings fall back to defaults in render-backend-env.sh.
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+          DATABASE_URL: ${{ secrets.DATABASE_URL || vars.DATABASE_URL }}
+          OUTBOX_ENCRYPTION_KEY: ${{ secrets.OUTBOX_ENCRYPTION_KEY || vars.OUTBOX_ENCRYPTION_KEY }}
+          SMTP_USERNAME: ${{ secrets.SMTP_USERNAME || vars.SMTP_USERNAME }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD || vars.SMTP_PASSWORD }}
+          ENTRA_CLIENT_SECRET: ${{ secrets.ENTRA_CLIENT_SECRET || vars.ENTRA_CLIENT_SECRET }}
+          ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS || vars.ALLOWED_HOSTS }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS || vars.CORS_ORIGINS }}
+          CORS_ORIGIN_REGEX: ${{ secrets.CORS_ORIGIN_REGEX || vars.CORS_ORIGIN_REGEX }}
+          PUBLIC_APP_URL: ${{ secrets.PUBLIC_APP_URL || vars.PUBLIC_APP_URL }}
+          PUBLIC_API_URL: ${{ secrets.PUBLIC_API_URL || vars.PUBLIC_API_URL }}
+          EMAIL_BACKEND: ${{ secrets.EMAIL_BACKEND || vars.EMAIL_BACKEND }}
+          EMAIL_FROM_ADDRESS: ${{ secrets.EMAIL_FROM_ADDRESS || vars.EMAIL_FROM_ADDRESS }}
+          EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME || vars.EMAIL_FROM_NAME }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST || vars.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT || vars.SMTP_PORT }}
+          SMTP_START_TLS: ${{ secrets.SMTP_START_TLS || vars.SMTP_START_TLS }}
+          SMTP_USE_TLS: ${{ secrets.SMTP_USE_TLS || vars.SMTP_USE_TLS }}
+          SMTP_TIMEOUT_SECONDS: ${{ secrets.SMTP_TIMEOUT_SECONDS || vars.SMTP_TIMEOUT_SECONDS }}
+          ENTRA_CLIENT_ID: ${{ secrets.ENTRA_CLIENT_ID || vars.ENTRA_CLIENT_ID }}
+          OIDC_STATE_MINUTES: ${{ secrets.OIDC_STATE_MINUTES || vars.OIDC_STATE_MINUTES }}
+          SSO_RECOVERY_MINUTES: ${{ secrets.SSO_RECOVERY_MINUTES || vars.SSO_RECOVERY_MINUTES }}
+          SESSION_HOURS: ${{ secrets.SESSION_HOURS || vars.SESSION_HOURS }}
+          REMEMBERED_SESSION_DAYS: ${{ secrets.REMEMBERED_SESSION_DAYS || vars.REMEMBERED_SESSION_DAYS }}
+          PASSWORD_RESET_MINUTES: ${{ secrets.PASSWORD_RESET_MINUTES || vars.PASSWORD_RESET_MINUTES }}
+          INVITATION_EXPIRY_HOURS: ${{ secrets.INVITATION_EXPIRY_HOURS || vars.INVITATION_EXPIRY_HOURS }}
+          WORKSPACE_SELECTION_MINUTES: ${{ secrets.WORKSPACE_SELECTION_MINUTES || vars.WORKSPACE_SELECTION_MINUTES }}
+          SIGN_IN_RATE_LIMIT: ${{ secrets.SIGN_IN_RATE_LIMIT || vars.SIGN_IN_RATE_LIMIT }}
+          PASSWORD_RESET_RATE_LIMIT: ${{ secrets.PASSWORD_RESET_RATE_LIMIT || vars.PASSWORD_RESET_RATE_LIMIT }}
+          AUTH_RATE_WINDOW_SECONDS: ${{ secrets.AUTH_RATE_WINDOW_SECONDS || vars.AUTH_RATE_WINDOW_SECONDS }}
+          AUTH_RATE_BLOCK_SECONDS: ${{ secrets.AUTH_RATE_BLOCK_SECONDS || vars.AUTH_RATE_BLOCK_SECONDS }}
+          ACCOUNT_LOCKOUT_ATTEMPTS: ${{ secrets.ACCOUNT_LOCKOUT_ATTEMPTS || vars.ACCOUNT_LOCKOUT_ATTEMPTS }}
+          ACCOUNT_LOCKOUT_MINUTES: ${{ secrets.ACCOUNT_LOCKOUT_MINUTES || vars.ACCOUNT_LOCKOUT_MINUTES }}
+          OUTBOX_MAX_ATTEMPTS: ${{ secrets.OUTBOX_MAX_ATTEMPTS || vars.OUTBOX_MAX_ATTEMPTS }}
+          OUTBOX_RETRY_BASE_SECONDS: ${{ secrets.OUTBOX_RETRY_BASE_SECONDS || vars.OUTBOX_RETRY_BASE_SECONDS }}
+          OUTBOX_LEASE_SECONDS: ${{ secrets.OUTBOX_LEASE_SECONDS || vars.OUTBOX_LEASE_SECONDS }}
+          FX_API_BASE_URL: ${{ secrets.FX_API_BASE_URL || vars.FX_API_BASE_URL }}
+          FX_CACHE_MINUTES: ${{ secrets.FX_CACHE_MINUTES || vars.FX_CACHE_MINUTES }}
+        run: |
+          rendered="$RUNNER_TEMP/backend.env"
+          ( umask 077 && .github/scripts/render-backend-env.sh > "$rendered" )
+          .github/scripts/ec2-ssh-open.sh
+          ssh transpire "umask 077 && cat > '$APP_DIR/deploy/backend.env.tmp' && mv '$APP_DIR/deploy/backend.env.tmp' '$APP_DIR/deploy/backend.env'" < "$rendered"
+          rm -f "$rendered"
+
+      - name: Roll out
+        env:
+          TAG: ${{ steps.tag.outputs.value }}
+        run: |
+          .github/scripts/ec2-ssh-open.sh
+          ssh transpire "bash '$APP_DIR/deploy/deploy.sh' '$TAG'"
+
+      - name: Close SSH session
+        if: always()
+        run: ssh -O exit transpire 2>/dev/null || true
+
+      - name: Smoke test
+        env:
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+        run: |
+          curl -fsS --retry 6 --retry-delay 5 --retry-all-errors "https://$APP_DOMAIN/health/ready"
+          curl -fsS -o /dev/null --retry 3 --retry-delay 5 "https://$APP_DOMAIN/sign-in"

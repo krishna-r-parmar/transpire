@@ -1,0 +1,30 @@
+.loading { display: grid; min-height: 100vh; place-items: center; background: oklch(97% .01 242); color: oklch(38% .045 250); font-size: .78rem; font-weight: 720; }
+.priority, .journeys { border: 1px solid oklch(84% .028 242); border-radius: .38rem; margin-bottom: 1rem; background: oklch(98% .008 242); }
+.priority > header, .journeys > header { display: flex; align-items: end; justify-content: space-between; gap: 1rem; border-bottom: 1px solid oklch(86% .022 242); padding: 1rem 1.15rem; }
+.priority header p, .journeys header p { margin: 0 0 .22rem; color: oklch(53% .13 242); font-size: .61rem; font-weight: 820; letter-spacing: .09em; text-transform: uppercase; }
+.priority header h2, .journeys header h2 { margin: 0; color: oklch(25% .045 250); font-size: 1rem; }
+.priority header > span, .journeys header > span { color: oklch(48% .03 248); font-size: .68rem; font-weight: 720; }
+.list { display: grid; }
+.list > a { display: grid; align-items: center; gap: .9rem; border-bottom: 1px solid oklch(89% .018 242); padding: .9rem 1.15rem; color: inherit; grid-template-columns: auto minmax(0, 1fr) auto; text-decoration: none; transition: background 160ms ease-out; }
+.list > a:last-child { border-bottom: 0; }
+.icon { display: grid; width: 2.25rem; height: 2.25rem; place-items: center; border-radius: 50%; background: oklch(92% .04 242); color: oklch(47% .13 242); }
+.list small, .list p, .list em { color: oklch(48% .03 248); font-size: .65rem; font-style: normal; }
+.list h3, .list p { margin: .16rem 0; }
+.list h3 { color: oklch(26% .045 250); font-size: .78rem; }
+.list em { display: inline-flex; align-items: center; gap: .3rem; }
+.journeyTable { overflow-x: auto; }
+.journeyTable table { width: 100%; border-collapse: collapse; }
+.journeyTable th { padding: .65rem 1rem; background: oklch(96% .012 242); color: oklch(45% .03 248); font-size: .61rem; letter-spacing: .055em; text-align: left; text-transform: uppercase; }
+.journeyTable td { border-top: 1px solid oklch(89% .018 242); padding: .8rem 1rem; color: oklch(37% .035 248); font-size: .69rem; vertical-align: middle; }
+.journeyTable td:first-child strong, .journeyTable td:first-child small { display: block; }
+.journeyTable td:first-child small, .journeyTable td:nth-child(2) small { margin-top: .22rem; color: oklch(50% .025 248); font-size: .62rem; }
+.journeyTable td span { display: inline-flex; align-items: center; gap: .35rem; color: oklch(42% .1 242); font-weight: 740; }
+.journeyTable td span[data-status="needs_correction"] { color: oklch(45% .1 65); }
+.journeyTable td a { display: inline-flex; min-height: 2.25rem; align-items: center; gap: .3rem; color: oklch(44% .13 242); font-weight: 760; text-decoration: none; }
+.empty { display: grid; justify-items: start; padding: 1.3rem 1.15rem; color: oklch(48% .04 242); }
+.empty h3 { margin: .55rem 0 .2rem; color: oklch(27% .045 250); font-size: .82rem; }
+.empty p { max-width: 60ch; margin: 0; color: oklch(48% .025 248); font-size: .69rem; }
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+@media (hover: hover) and (pointer: fine) { .list > a:hover { background: oklch(96% .022 242); } }
+@media (max-width: 44rem) { .priority > header, .journeys > header { align-items: start; flex-direction: column; } .journeyTable thead { display: none; } .journeyTable table, .journeyTable tbody, .journeyTable tr, .journeyTable td { display: block; } .journeyTable tr { border-top: 1px solid oklch(87% .02 242); padding: .8rem 1rem; } .journeyTable td { border: 0; padding: .18rem 0; } }
+@media (prefers-reduced-motion: reduce) { .list > a { transition: none; } }

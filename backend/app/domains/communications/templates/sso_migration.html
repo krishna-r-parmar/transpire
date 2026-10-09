@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block preheader %}{{ tenant_name }} now uses Microsoft SSO for TRANSPIRE.{% endblock %}
+{% block eyebrow %}Sign-in update{% endblock %}
+{% block title %}Your organisation has moved to Microsoft sign-in.{% endblock %}
+{% block content %}
+  <p style="margin:0 0 18px;">Hello {{ recipient_name }},</p>
+  <p style="margin:0 0 18px;">{{ tenant_name }} moved TRANSPIRE access to Microsoft SSO on {{ effective_time }}.</p>
+  <p style="margin:0 0 18px;">Use the Microsoft account matching this work email when you next sign in. Your ideas, projects, approvals, roles, and history are unchanged.</p>
+  <p style="margin:0;">If Microsoft does not recognise your account, contact your organisation's TRANSPIRE administrator.</p>
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block preheader %}A restricted SSO recovery session was issued for {{ tenant_name }}.{% endblock %}
+{% block eyebrow %}Restricted recovery{% endblock %}
+{% block title %}Repair Microsoft sign-in safely.{% endblock %}
+{% block content %}
+  <p style="margin:0 0 18px;">Hello {{ recipient_name }},</p>
+  <p style="margin:0 0 18px;">TRANSPIRE platform support issued a restricted SSO recovery link for {{ tenant_name }} under incident {{ incident_reference }}.</p>
+  <p style="margin:0 0 18px;">The link expires in {{ expires_in }} and can be used once. It permits SSO configuration repair only and cannot access ideas, projects, people, or exports.</p>
+  <p style="margin:0;">If you did not request this recovery, contact platform support immediately.</p>
+{% endblock %}

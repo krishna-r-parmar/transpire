@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block preheader %}A security event was recorded for your TRANSPIRE account.{% endblock %}
+{% block eyebrow %}Account security{% endblock %}
+{% block title %}A security event was recorded.{% endblock %}
+{% block content %}
+  <p style="margin:0 0 18px;">Hello {{ recipient_name }},</p>
+  <p style="margin:0 0 18px;">TRANSPIRE recorded the following activity for your {{ tenant_name }} account:</p>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:4px 0 20px;background:#f8edef;border:1px solid #efd0d4;">
+    <tr><td style="padding:15px 17px 5px;font-size:15px;font-weight:800;color:#65313a;">{{ event_description }}</td></tr>
+    <tr><td style="padding:0 17px 15px;font-size:13px;color:#76515a;">{{ event_time }}</td></tr>
+  </table>
+  <p style="margin:0;">If this was you, no action is required. If you do not recognise this activity, secure your account immediately.</p>
+{% endblock %}

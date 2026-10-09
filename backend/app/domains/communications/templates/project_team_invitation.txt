@@ -1,0 +1,14 @@
+Hello {{ recipient_name }},
+
+You have been invited to join an improvement project in {{ tenant_name }}.
+
+{{ project_reference }}
+{{ project_title }}
+Project Lead: {{ project_lead }}
+
+The charter has been submitted and its execution baseline is ready. Your invitation does not delay or block charter submission.
+
+Open Projects: {{ action_url }}
+
+Ideate. Transform. Inspire.
+Transform ideas. Inspire progress.

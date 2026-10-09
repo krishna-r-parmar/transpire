@@ -1,0 +1,129 @@
+.footer {
+  --footer-paper: oklch(99% 0.005 240);
+  --footer-navy: oklch(18% 0.062 254);
+  --footer-line: oklch(31% 0.064 252);
+  --footer-copy: oklch(82% 0.022 242);
+  --footer-muted: oklch(68% 0.02 242);
+  --footer-blue: oklch(74% 0.105 242);
+  --footer-gutter: clamp(1.25rem, 5vw, 5rem);
+  padding: 0 var(--footer-gutter) max(2rem, env(safe-area-inset-bottom));
+  background: var(--footer-navy);
+  color: var(--footer-paper);
+}
+
+.main,
+.bottom {
+  max-width: 82rem;
+  margin: 0 auto;
+}
+
+.main {
+  display: grid;
+  gap: clamp(3.5rem, 8vw, 7rem);
+  padding: clamp(4.5rem, 9vw, 7.5rem) 0;
+  border-top: 1px solid var(--footer-line);
+}
+
+.brandBlock > img {
+  width: 14rem;
+  height: auto;
+  padding: 0.45rem;
+  background: var(--footer-paper);
+}
+
+.motto {
+  margin: 1.4rem 0 0;
+  color: var(--footer-copy);
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.description {
+  max-width: 31ch;
+  margin: 1rem 0 0;
+  color: var(--footer-muted);
+  font-size: 0.86rem;
+  line-height: 1.65;
+}
+
+.navigation {
+  display: grid;
+  gap: 2.5rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.navigation > div {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.navigation h2 {
+  margin: 0 0 0.45rem;
+  color: var(--footer-blue);
+  font-size: 0.7rem;
+  font-weight: 820;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.navigation a,
+.navigation span {
+  color: var(--footer-copy);
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.navigation span {
+  max-width: 22ch;
+}
+
+.navigation a {
+  transition: color 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bottom {
+  display: grid;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.6rem 0;
+  border-top: 1px solid var(--footer-line);
+  color: var(--footer-muted);
+  font-size: 0.72rem;
+}
+
+.bottom img {
+  width: 10.75rem;
+  height: auto;
+  padding: 0.35rem;
+  background: oklch(94% 0.008 242);
+}
+
+.bottom p {
+  margin: 0;
+}
+
+@media (hover: hover) {
+  .navigation a:hover,
+  .bottom a:hover {
+    color: var(--footer-paper);
+  }
+}
+
+@media (min-width: 42rem) {
+  .navigation {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .bottom {
+    grid-template-columns: auto 1fr auto;
+  }
+}
+
+@media (min-width: 64rem) {
+  .main {
+    grid-template-columns: 0.75fr 1.25fr;
+  }
+}

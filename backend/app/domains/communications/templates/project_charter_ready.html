@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block preheader %}Your idea {{ idea_reference }} is approved. Complete its project charter in TRANSPIRE.{% endblock %}
+{% block eyebrow %}Idea approved · {{ idea_reference }}{% endblock %}
+{% block title %}Your idea is ready for its charter.{% endblock %}
+{% block content %}
+  <p style="margin:0 0 18px;">Hello {{ recipient_name }},</p>
+  <p style="margin:0 0 18px;">Every required approval is complete. TRANSPIRE has opened the project charter so you can define ownership, timing, scope, team, KPI, and approved investment.</p>
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:4px 0 20px;background:#eef5f8;border:1px solid #d3e1e8;">
+    <tr><td style="padding:14px 16px 4px;font-size:11px;font-weight:800;letter-spacing:1px;text-transform:uppercase;color:#647d90;">Approved idea</td></tr>
+    <tr><td style="padding:0 16px 4px;font-size:18px;font-weight:800;color:#006fae;">{{ idea_reference }}</td></tr>
+    <tr><td style="padding:0 16px 15px;font-size:15px;color:#243d52;">{{ idea_title }}</td></tr>
+  </table>
+  <p style="margin:0;">Open the idea, review the approval record, and complete the charter when the project team is ready.</p>
+{% endblock %}

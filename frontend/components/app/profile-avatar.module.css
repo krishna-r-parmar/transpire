@@ -1,0 +1,5 @@
+.avatar { position: relative; display: grid; overflow: hidden; flex: 0 0 auto; width: 2.35rem; height: 2.35rem; border: 1px solid oklch(74% .055 242); border-radius: 50%; background: oklch(89% .05 242); color: oklch(39% .12 242); place-items: center; }
+.avatar[data-size="large"] { width: 5.5rem; height: 5.5rem; border-width: 2px; box-shadow: 0 .35rem 1rem oklch(32% .06 248 / .12); }
+.avatar img { object-fit: cover; }
+.avatar strong { font-size: .7rem; font-weight: 820; letter-spacing: .02em; }
+.avatar[data-size="large"] strong { font-size: 1.25rem; }

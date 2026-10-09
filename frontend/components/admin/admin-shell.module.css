@@ -1,0 +1,16 @@
+.app { --ink: oklch(22% .047 253); --muted: oklch(48% .025 248); --paper: oklch(98.5% .006 240); --panel: oklch(95.5% .012 242); --line: oklch(86% .02 242); --blue: oklch(59.157% .14157 242.451); --blue-deep: oklch(45% .12 242); min-height: 100svh; background: var(--paper); color: var(--ink); }
+.topbar { position: sticky; z-index: 10; top: 0; display: grid; min-height: 5.75rem; align-items: center; gap: clamp(.75rem, 2vw, 2rem); border-bottom: 1px solid oklch(77% .045 242); padding: 0 clamp(1.25rem, 3vw, 2.6rem); background: oklch(95.5% .022 242); box-shadow: 0 .35rem 1rem oklch(28% .055 250 / .08); grid-area: topbar; grid-template-columns: auto minmax(0, 1fr) auto; }
+.topbar > a { width: 11.75rem; }
+.topbar img { width: 100%; height: auto; }
+.main { width: 100%; max-width: 90rem; margin: 0 auto; padding: clamp(2.5rem, 5vw, 5rem) clamp(1.25rem, 5vw, 5rem) 6rem; }
+.pageHeader { max-width: 50rem; margin-bottom: 3rem; }
+.pageHeader p { margin: 0 0 .75rem; color: var(--blue-deep); font-size: .68rem; font-weight: 820; letter-spacing: .1em; text-transform: uppercase; }
+.pageHeader h1 { margin: 0; font-size: 2.5rem; letter-spacing: -.05em; line-height: 1.05; }
+.pageHeader span { display: block; max-width: 60ch; margin-top: .85rem; color: var(--muted); font-size: .86rem; line-height: 1.6; }
+
+@media (hover: hover) and (pointer: fine) {
+}
+
+@media (max-width: 48rem) {
+  .main { padding-top: 2.5rem; }
+}

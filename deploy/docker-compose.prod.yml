@@ -1,0 +1,83 @@
+# Production stack for a single EC2 host. PostgreSQL runs outside Docker
+# (natively on this host or on a separate server) and is reached via DATABASE_URL.
+# Nginx on the host terminates TLS and proxies to the loopback-only ports below.
+#
+# Images are built by .github/workflows/deploy.yml, streamed to this host over
+# SSH-through-SSM and loaded locally; there is no registry. deploy/deploy.sh
+# rolls them out. Compose reads IMAGE_TAG from deploy/.env, and deploy.sh
+# overrides it from the shell during a rollout.
+
+name: transpire
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
+services:
+  frontend:
+    image: transpire-frontend:${IMAGE_TAG:?Set IMAGE_TAG}
+    pull_policy: never
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:3000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [transpire]
+    logging: *default-logging
+
+  backend:
+    image: transpire-backend:${IMAGE_TAG:?Set IMAGE_TAG}
+    pull_policy: never
+    restart: unless-stopped
+    env_file:
+      - ./backend.env
+    ports:
+      - "127.0.0.1:8000:8000"
+    # Port 8000 is bound to loopback only, so the sole external client is the
+    # host's Nginx; trusting its X-Forwarded-* headers is safe.
+    command:
+      - uvicorn
+      - app.main:app
+      - --host=0.0.0.0
+      - --port=8000
+      - --workers=2
+      - --proxy-headers
+      - --forwarded-allow-ips=*
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks: [transpire]
+    logging: *default-logging
+
+  email-worker:
+    image: transpire-backend:${IMAGE_TAG:?Set IMAGE_TAG}
+    pull_policy: never
+    restart: unless-stopped
+    env_file:
+      - ./backend.env
+    command: ["python", "scripts/process_email_outbox.py", "--watch"]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [transpire]
+    logging: *default-logging
+
+networks:
+  transpire:
+    ipam:
+      config:
+        # Fixed subnet so the host's pg_hba.conf can allow exactly this range.
+        - subnet: 172.30.0.0/24

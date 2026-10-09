@@ -1,0 +1,40 @@
+[project]
+name = "transpire-backend"
+version = "0.1.0"
+description = "TRANSPIRE multi-tenant API"
+requires-python = ">=3.12"
+dependencies = [
+  "fastapi>=0.116,<1",
+  "uvicorn[standard]>=0.35,<1",
+  "sqlalchemy[asyncio]>=2.0,<3",
+  "asyncpg>=0.30,<1",
+  "alembic>=1.16,<2",
+  "pydantic-settings>=2.10,<3",
+  "email-validator>=2.2,<3",
+  "jinja2>=3.1,<4",
+  "aiosmtplib>=5,<6",
+  "pwdlib[argon2]>=0.3,<1",
+  "cryptography>=45,<47",
+  "certifi>=2025.8.3",
+  "httpx>=0.28,<1",
+]
+
+[tool.setuptools.package-data]
+"app.domains.communications" = ["templates/*.html", "templates/*.txt"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
+exclude = ["migrations*", "scripts*", "tests*"]
+
+[project.optional-dependencies]
+dev = ["httpx>=0.28,<1", "pytest>=8.4,<9", "pytest-asyncio>=1.0,<2", "ruff>=0.12,<1"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_test_loop_scope = "session"
+testpaths = ["tests"]

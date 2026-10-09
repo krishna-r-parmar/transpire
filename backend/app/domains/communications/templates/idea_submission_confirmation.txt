@@ -1,0 +1,11 @@
+Hello {{ recipient_name }},
+
+Your idea has been submitted successfully and is now visible in {{ tenant_name }}.
+
+Reference: {{ idea_reference }}
+Idea: {{ idea_title }}
+
+Review your idea: {{ action_url }}
+
+Ideate. Transform. Inspire.
+Transform ideas. Inspire progress.
