@@ -1,6 +1,6 @@
 # Deploying TRANSPIRE to AWS EC2 with Docker
 
-This guide runs the frontend, backend and email worker as Docker containers on one EC2 instance, deployed by **GitHub Actions**. Two things are **not** containerised:
+This guide runs the frontend, backend and email worker as Docker containers on one EC2 instance. **GitHub Actions** deploys them through **AWS Systems Manager (SSM)**. Two things are **not** containerised:
 
 - **Nginx** is installed on the host and handles TLS and reverse proxying (configured manually; a reference config is provided).
 - **PostgreSQL** runs as a standalone service, either natively on the same EC2 host (the default below) or on a separate server.
@@ -20,38 +20,32 @@ The containers publish ports only on `127.0.0.1`, so they can be reached only th
 push to main ──▶ CI workflow (lint, typecheck, tests, build)
                    │ success
                    ▼
-                 Deploy workflow
-                   ├─ assume IAM role via GitHub OIDC              (no AWS keys stored in GitHub)
-                   ├─ EC2 Instance Connect: push a 60-second SSH key (no SSH key stored in GitHub)
-                   ├─ SSH tunnelled through SSM Session Manager     (no inbound port 22 needed)
-                   ├─ build backend + frontend images on the runner, tagged with the commit SHA
-                   │    (skipped if the server already has that SHA, e.g. a rollback)
-                   ├─ stream images to EC2:  docker save | gzip | ssh … docker load
-                   ├─ push the deploy/ files from that commit to /opt/transpire/deploy
-                   ├─ write deploy/backend.env on EC2 from the GitHub environment secrets/variables
-                   ├─ run deploy/deploy.sh <sha> on EC2
-                   │    ├─ alembic upgrade head
-                   │    ├─ docker compose up -d
-                   │    ├─ wait for health checks (restore previous version on failure)
-                   │    └─ keep the last 5 releases' images for rollback
+                 Deploy workflow (GitHub Actions)
+                   ├─ assume IAM role via GitHub OIDC          (no AWS keys stored in GitHub)
+                   ├─ aws ssm send-command  ──▶ EC2             (no SSH, no inbound port)
+                   │     cd /opt/transpire
+                   │     git fetch && git checkout <sha>        (repo cloned on EC2)
+                   │     deploy/deploy.sh
+                   │        ├─ docker compose build
+                   │        ├─ alembic upgrade head
+                   │        ├─ docker compose up -d             (restart containers)
+                   │        └─ wait for health checks
+                   ├─ wait for the SSM command, print its output
                    └─ smoke test https://<APP_DOMAIN>/health/ready
 ```
 
-There is no container registry and no git checkout on the server. The server never builds images: it only loads what the workflow sends. Rollback is a manual run of the Deploy workflow with an earlier commit SHA.
-
 The frontend and API share one origin (`https://<APP_DOMAIN>`). This is required: the browser reads the CSRF cookie set by the API, which only works when both are on the same host.
 
-Production files live in [`deploy/`](deploy):
+Production files:
 
 | File | Purpose |
 | --- | --- |
-| `.github/workflows/deploy.yml` | Builds images, pushes them and the deploy files to EC2, rolls out, smoke-tests |
-| `.github/scripts/ec2-ssh-open.sh` | Opens the SSH-over-SSM connection with an Instance Connect key |
-| `.github/scripts/render-backend-env.sh` | Builds `deploy/backend.env` from GitHub secrets/variables, with defaults and validation |
-| `deploy/deploy.sh` | Server-side rollout: migrate, restart, health check, auto-restore, prune |
-| `deploy/docker-compose.prod.yml` | Production stack (locally loaded images; no database or proxy service; ports bound to loopback) |
+| `.github/workflows/deploy.yml` | After CI passes on `main`: runs the deploy on EC2 via SSM, then smoke-tests |
+| `deploy/deploy.sh` | On EC2: build, migrate, restart, health check, clean up |
+| `deploy/docker-compose.prod.yml` | Production stack (no database or proxy service; ports bound to loopback) |
 | `deploy/nginx/transpire.conf` | Reference Nginx site (routing, headers, TLS, body size) |
-| `deploy/compose.env.example` | Template for `deploy/.env` (current and previous release; maintained by `deploy.sh`) |
+| `deploy/compose.env.example` | Template for `deploy/.env` (public domain) |
+| `deploy/backend.env.example` | Template for `deploy/backend.env` (backend settings and secrets) |
 
 The steps assume **Ubuntu 24.04** on the EC2 host and an install path of `/opt/transpire`. Commands prefixed with `sudo` run on the server.
 
@@ -62,7 +56,7 @@ The steps assume **Ubuntu 24.04** on the EC2 host and an install path of `/opt/t
 Have these ready:
 
 - [ ] An AWS account with permission to manage EC2, security groups, Elastic IPs, IAM and Systems Manager
-- [ ] Admin access to the GitHub repository (to create an environment and variables)
+- [ ] Admin access to the GitHub repository (to add a deploy key, an environment and variables)
 - [ ] A domain or subdomain you control, e.g. `transpire.your-company.com`
 - [ ] A TLS certificate for it: either a company-issued certificate (full chain + private key) or a plan to use Let's Encrypt via certbot
 - [ ] The PostgreSQL superuser login on the server (or a DBA who can create a database and role)
@@ -83,7 +77,7 @@ Skip any sub-step that is already done for your existing server.
 
    | Type | Port | Source | Why |
    | --- | --- | --- | --- |
-   | SSH | 22 | **My IP** (not `0.0.0.0/0`), or omit entirely | Optional admin access. Deploys don't use it, and admins can use **Session Manager** instead |
+   | SSH | 22 | **My IP** (not `0.0.0.0/0`), or omit entirely | Optional admin access. Deploys go through SSM, and admins can use **Session Manager** instead |
    | HTTP | 80 | `0.0.0.0/0`, `::/0` | Redirect to HTTPS (and Let's Encrypt validation, if used) |
    | HTTPS | 443 | `0.0.0.0/0`, `::/0` | The app |
 
@@ -94,7 +88,7 @@ Skip any sub-step that is already done for your existing server.
 
 1. **EC2 → Launch instance**.
 2. AMI: **Ubuntu Server 24.04 LTS (x86_64)**.
-3. Instance type: **t3.large** (2 vCPU, 8 GB) if PostgreSQL shares the host. Use **t3.medium** (4 GB) if the database is on another server. Images are built on GitHub's runners, so the server needs no build headroom.
+3. Instance type: **t3.large** (2 vCPU, 8 GB) if PostgreSQL shares the host. Use **t3.medium** (4 GB) if the database is on another server. The server builds the images itself, so allow memory headroom (and add swap, step 2.3).
 4. Key pair: choose or create one and keep the `.pem` file safe.
 5. Network: attach the `transpire-web` security group.
 6. Storage: **40 GB gp3** (Docker images and PostgreSQL data).
@@ -145,7 +139,7 @@ sudo timedatectl set-timezone Asia/Kolkata
 
 Reboot if the upgrade asks for it (`sudo reboot`), then reconnect.
 
-### 2.3 Add swap (headroom for PostgreSQL and containers)
+### 2.3 Add swap (prevents the image build running out of memory)
 
 ```bash
 sudo fallocate -l 4G /swapfile && sudo chmod 600 /swapfile
@@ -197,25 +191,15 @@ docker run --rm hello-world
 docker compose version
 ```
 
-### 2.5 Check the SSM agent and EC2 Instance Connect
+### 2.5 Check the SSM agent
 
-GitHub Actions reaches the server through the SSM agent and authenticates with EC2 Instance Connect. Both are preinstalled on Ubuntu AMIs; confirm:
+GitHub Actions runs the deploy through the SSM agent, which is preinstalled on Ubuntu AMIs. Confirm:
 
 ```bash
 sudo snap services amazon-ssm-agent
 ```
 
 The agent must show `active`. If it does not, run `sudo snap start --enable amazon-ssm-agent`.
-
-```bash
-dpkg -s ec2-instance-connect | grep Status
-```
-
-It must print `Status: install ok installed`. If it does not, install it:
-
-```bash
-sudo apt -y install ec2-instance-connect
-```
 
 ---
 
@@ -311,12 +295,44 @@ Containers reach the host at `host.docker.internal`, and their traffic comes fro
 
 ---
 
-## 4. Prepare the app directory
+## 4. Clone the repository on the server
 
-The workflow pushes the `deploy/` folder to `/opt/transpire/deploy` and writes `deploy/backend.env` from GitHub on every release. Nothing in this directory needs editing by hand.
+The server keeps a git checkout of the repo. Each deploy fetches and checks out the commit being released.
 
 ```bash
-sudo mkdir -p /opt/transpire/deploy && sudo chown -R ubuntu:ubuntu /opt/transpire
+sudo mkdir -p /opt/transpire && sudo chown ubuntu:ubuntu /opt/transpire
+```
+
+Create a read-only deploy key so the server can fetch from GitHub:
+
+```bash
+ssh-keygen -t ed25519 -N '' -C transpire-ec2-deploy -f ~/.ssh/transpire_deploy
+```
+
+```bash
+cat ~/.ssh/transpire_deploy.pub
+```
+
+In GitHub: **repository → Settings → Deploy keys → Add deploy key**. Paste the key, title it `transpire-ec2`, and leave **Allow write access unchecked**.
+
+Tell SSH to use it for GitHub:
+
+```bash
+printf 'Host github.com\n  IdentityFile ~/.ssh/transpire_deploy\n  IdentitiesOnly yes\n' >> ~/.ssh/config && chmod 600 ~/.ssh/config
+```
+
+```bash
+ssh-keyscan github.com >> ~/.ssh/known_hosts
+```
+
+```bash
+ssh -T git@github.com
+```
+
+Expect `You've successfully authenticated, but GitHub does not provide shell access.` Then clone with the **SSH** URL:
+
+```bash
+git clone git@github.com:<org>/<repo>.git /opt/transpire
 ```
 
 Add a shortcut for the production Compose command. Later manual steps use `dc`:
@@ -327,123 +343,65 @@ echo "alias dc='docker compose --project-directory /opt/transpire/deploy -f /opt
 
 ---
 
-## 5. Application settings (GitHub secrets)
+## 5. Configure environment files
 
-### 5.1 How settings reach the server
+Both files live only on the server. They are gitignored, so `git checkout` during deploys never touches them.
 
-All backend settings live in the GitHub **`production` environment** (created in step 6.4). On every deploy, the workflow:
+### 5.1 Compose settings (domain)
 
-1. reads each setting from the environment's **secrets**, falling back to its **variables** (a secret wins if both exist),
-2. fills in defaults for anything optional that is unset, and derives the URL settings from `APP_DOMAIN`,
-3. checks that required values are present and contain no single quotes or line breaks,
-4. writes `/opt/transpire/deploy/backend.env` on the server (mode `600`), replacing the previous file,
-5. restarts the containers. Compose recreates them whenever the file's contents change.
+```bash
+cp /opt/transpire/deploy/compose.env.example /opt/transpire/deploy/.env
+```
 
-So **never edit `backend.env` on the server**: the next deploy overwrites it. To change a setting, update it in GitHub and run the Deploy workflow (step 13.4).
+```bash
+nano /opt/transpire/deploy/.env
+```
 
-You can store every setting as a secret. Putting the non-sensitive ones in **variables** instead is optional, but it lets you see their current values in GitHub; secrets are write-only.
+Set `APP_DOMAIN` to your domain (no `https://`, no trailing slash). It is baked into the frontend at build time, and must be the exact hostname Nginx serves.
 
-### 5.2 Generate the values you need
+### 5.2 Backend settings and secrets
 
-1. **`DATABASE_URL`**: use the password created in step 3.1. Build the value as:
+```bash
+cp /opt/transpire/deploy/backend.env.example /opt/transpire/deploy/backend.env && chmod 600 /opt/transpire/deploy/backend.env
+```
 
-   ```
-   postgresql+asyncpg://transpire:<db-password>@host.docker.internal:5432/transpire
-   ```
+Generate the outbox encryption key (a Fernet key) and copy the output:
 
-   Use `host.docker.internal` when PostgreSQL is on this EC2 host (3A), or the database server's private IP or DNS name (3B).
+```bash
+python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
+```
 
-2. **`OUTBOX_ENCRYPTION_KEY`**: generate a Fernet key on your laptop and copy the output:
+Edit the file:
 
-   ```bash
-   python3 -c "import base64,os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())"
-   ```
+```bash
+nano /opt/transpire/deploy/backend.env
+```
 
-   **Save this key in your password manager as well.** GitHub secrets can't be read back, and if the key is lost, emails still queued can't be decrypted. Never change it while emails are queued.
+Change these values:
 
-3. Keep the database password in your password manager too, for the same reason.
+| Setting | Guide value |
+| --- | --- |
+| `DATABASE_URL` | `postgresql+asyncpg://transpire:<db-password>@host.docker.internal:5432/transpire` (3A), or with the DB server address (3B) |
+| `ALLOWED_HOSTS` | `<APP_DOMAIN>,localhost,127.0.0.1` |
+| `CORS_ORIGINS` | `https://<APP_DOMAIN>` |
+| `PUBLIC_APP_URL` | `https://<APP_DOMAIN>` |
+| `PUBLIC_API_URL` | `https://<APP_DOMAIN>/api/v1` |
+| `OUTBOX_ENCRYPTION_KEY` | the generated key |
+| `EMAIL_FROM_ADDRESS` | your sender address, e.g. `no-reply@your-company.com` |
 
-### 5.3 Settings reference
+Leave `ENVIRONMENT=production` and `SESSION_COOKIE_SECURE=true`. The backend refuses to start in production without a secure cookie and an encryption key. Leave the cookie names as they are: the frontend reads the CSRF cookie by that exact name.
 
-Add these in **repository → Settings → Environments → production**. **Secret** means use *Environment secrets*. **Secret or variable** means either works.
+**Back up `OUTBOX_ENCRYPTION_KEY` and the database password in a password manager.** If the key is lost, queued emails can no longer be decrypted.
 
-**Required**
+Check for leftover placeholders. This should print nothing:
 
-| Name | Store as | Guide value | Notes |
-| --- | --- | --- | --- |
-| `DATABASE_URL` | Secret | `postgresql+asyncpg://transpire:<db-password>@host.docker.internal:5432/transpire` | Step 5.2. Use only URL-safe password characters. |
-| `OUTBOX_ENCRYPTION_KEY` | Secret | 44-character key ending in `=`, e.g. `q3J…Xw8=` | Step 5.2. Back it up. |
-| `EMAIL_FROM_ADDRESS` | Secret or variable | `no-reply@your-company.com` | Sender for all emails. Must be allowed by your SMTP provider. |
-| `APP_DOMAIN` | **Variable** (deployment, step 6.4) | `transpire.your-company.com` | Shared with the frontend build. No `https://`, no trailing slash. |
-
-**Email** (leave `EMAIL_BACKEND` unset until step 11; emails are then only logged)
-
-| Name | Store as | Guide value | Default if unset |
-| --- | --- | --- | --- |
-| `EMAIL_BACKEND` | Secret or variable | `smtp` (or `console` to only log) | `console` |
-| `EMAIL_FROM_NAME` | Secret or variable | `TRANSPIRE` | `TRANSPIRE` |
-| `SMTP_HOST` | Secret or variable | `email-smtp.ap-south-1.amazonaws.com` or `smtp.office365.com` | empty (required when `EMAIL_BACKEND=smtp`) |
-| `SMTP_PORT` | Secret or variable | `587` (STARTTLS) or `465` (implicit TLS) | `587` |
-| `SMTP_USERNAME` | Secret | SMTP user name / SES SMTP access key | empty |
-| `SMTP_PASSWORD` | Secret | SMTP password / SES SMTP secret | empty |
-| `SMTP_START_TLS` | Secret or variable | `true` with port 587 | `true` |
-| `SMTP_USE_TLS` | Secret or variable | `true` only with port 465 (then `SMTP_START_TLS=false`) | `false` |
-| `SMTP_TIMEOUT_SECONDS` | Secret or variable | `15` | `15` |
-
-**Microsoft Entra SSO** (optional; see step 12)
-
-| Name | Store as | Guide value | Default if unset |
-| --- | --- | --- | --- |
-| `ENTRA_CLIENT_ID` | Secret or variable | Application (client) ID GUID, e.g. `1b2c3d4e-…` | empty (SSO off) |
-| `ENTRA_CLIENT_SECRET` | Secret | Client secret **value** (not the secret ID) | empty |
-| `OIDC_STATE_MINUTES` | Secret or variable | `10` | `10` |
-| `SSO_RECOVERY_MINUTES` | Secret or variable | `15` | `15` |
-
-**Sessions and sign-in security** (defaults are sensible; set only to change them)
-
-| Name | Guide value | Default if unset | Meaning |
-| --- | --- | --- | --- |
-| `SESSION_HOURS` | `12` | `12` | Normal session lifetime |
-| `REMEMBERED_SESSION_DAYS` | `30` | `30` | Lifetime with "remember me" |
-| `PASSWORD_RESET_MINUTES` | `30` | `30` | Reset link validity |
-| `INVITATION_EXPIRY_HOURS` | `48` | `48` | Invitation link validity |
-| `WORKSPACE_SELECTION_MINUTES` | `5` | `5` | Time to pick a workspace after sign-in |
-| `SIGN_IN_RATE_LIMIT` | `10` | `10` | Sign-in attempts per window |
-| `PASSWORD_RESET_RATE_LIMIT` | `5` | `5` | Reset requests per window |
-| `AUTH_RATE_WINDOW_SECONDS` | `900` | `900` | Rate-limit window |
-| `AUTH_RATE_BLOCK_SECONDS` | `900` | `900` | Block duration after hitting the limit |
-| `ACCOUNT_LOCKOUT_ATTEMPTS` | `5` | `5` | Failed passwords before lockout |
-| `ACCOUNT_LOCKOUT_MINUTES` | `15` | `15` | Lockout duration |
-
-**Email queue and currency conversion** (defaults are sensible)
-
-| Name | Guide value | Default if unset | Meaning |
-| --- | --- | --- | --- |
-| `OUTBOX_MAX_ATTEMPTS` | `5` | `5` | Delivery attempts per email |
-| `OUTBOX_RETRY_BASE_SECONDS` | `30` | `30` | First retry delay (backs off) |
-| `OUTBOX_LEASE_SECONDS` | `300` | `300` | How long the worker holds an email |
-| `FX_API_BASE_URL` | `https://api.frankfurter.dev/v2` | same | Reference FX rate source |
-| `FX_CACHE_MINUTES` | `360` | `360` | FX rate cache duration |
-
-All settings in these two tables can be stored as a secret or a variable.
-
-**Derived automatically from `APP_DOMAIN`** (set only to override)
-
-| Name | Value written | Override only if |
-| --- | --- | --- |
-| `ALLOWED_HOSTS` | `<APP_DOMAIN>,localhost,127.0.0.1` | More hostnames serve the app. Keep `localhost,127.0.0.1`: the health checks need them. |
-| `CORS_ORIGINS` | `https://<APP_DOMAIN>` | Another origin must call the API |
-| `CORS_ORIGIN_REGEX` | empty | as above |
-| `PUBLIC_APP_URL` | `https://<APP_DOMAIN>` | Links in emails must point elsewhere |
-| `PUBLIC_API_URL` | `https://<APP_DOMAIN>/api/v1` | SSO callbacks must point elsewhere |
-
-**Fixed by the workflow** (not configurable): `ENVIRONMENT=production`, `DEBUG=false`, `SESSION_COOKIE_SECURE=true`, `SESSION_COOKIE_NAME=transpire_session`, `CSRF_COOKIE_NAME=transpire_csrf` and `SSO_SELECTION_COOKIE_NAME=transpire_sso_selection`. The frontend reads the CSRF cookie by that exact name.
-
-**Not stored in GitHub:** the `DEV_*` values. They are used only once, by the seed command in step 8.
+```bash
+grep -n '<\|your-company' /opt/transpire/deploy/backend.env /opt/transpire/deploy/.env
+```
 
 ---
 
-## 6. Set up GitHub Actions deployment
+## 6. Set up GitHub Actions → SSM
 
 Replace `<account-id>`, `<region>` (e.g. `ap-south-1`), `<instance-id>` and `<org>/<repo>` throughout.
 
@@ -460,7 +418,7 @@ Skip this if the provider already exists in the account.
 ### 6.2 Create the EC2 instance role `transpire-ec2`
 
 1. **IAM → Roles → Create role → AWS service → EC2**.
-2. Attach the managed policy `AmazonSSMManagedInstanceCore`. This lets the instance register with Systems Manager so sessions can reach it.
+2. Attach the managed policy `AmazonSSMManagedInstanceCore`. This lets the instance receive SSM commands.
 3. Name it `transpire-ec2` and create it.
 4. Attach it to the instance: **EC2 → instance → Actions → Security → Modify IAM role → `transpire-ec2`**.
 5. After a minute, check **Systems Manager → Fleet Manager**: the instance must be listed as **Online**. If not, reboot the instance and check again.
@@ -482,7 +440,7 @@ Skip this if the provider already exists in the account.
          "Condition": {
            "StringEquals": {
              "token.actions.githubusercontent.com:aud": "sts.amazonaws.com",
-             "token.actions.githubusercontent.com:sub": "repo:<org>/<repo>:environment:production"
+             "token.actions.githubusercontent.com:sub": "repo:<org>/<repo>:ref:refs/heads/main"
            }
          }
        }
@@ -490,7 +448,7 @@ Skip this if the provider already exists in the account.
    }
    ```
 
-   The `sub` condition means only jobs running in the repository's `production` environment can assume this role.
+   The `sub` condition means only workflow runs from the `main` branch of this repository can assume this role. Runs from other branches or pull requests are refused by AWS.
 
 2. Skip the managed policies, name the role `transpire-github-deploy`, and create it.
 3. Open the role → **Add permissions → Create inline policy → JSON**, and paste:
@@ -500,69 +458,59 @@ Skip this if the provider already exists in the account.
      "Version": "2012-10-17",
      "Statement": [
        {
-         "Sid": "PushOneTimeSshKey",
+         "Sid": "RunDeployOnInstance",
          "Effect": "Allow",
-         "Action": "ec2-instance-connect:SendSSHPublicKey",
-         "Resource": "arn:aws:ec2:<region>:<account-id>:instance/<instance-id>",
-         "Condition": {
-           "StringEquals": { "ec2:osuser": "ubuntu" }
-         }
-       },
-       {
-         "Sid": "OpenSshTunnel",
-         "Effect": "Allow",
-         "Action": "ssm:StartSession",
+         "Action": "ssm:SendCommand",
          "Resource": [
            "arn:aws:ec2:<region>:<account-id>:instance/<instance-id>",
-           "arn:aws:ssm:<region>::document/AWS-StartSSHSession"
+           "arn:aws:ssm:<region>::document/AWS-RunShellScript"
          ]
        },
        {
-         "Sid": "ManageOwnSessions",
+         "Sid": "ReadDeployResult",
          "Effect": "Allow",
-         "Action": ["ssm:TerminateSession", "ssm:ResumeSession"],
-         "Resource": "arn:aws:ssm:<region>:<account-id>:session/transpire-deploy-*"
+         "Action": "ssm:GetCommandInvocation",
+         "Resource": "*"
        }
      ]
    }
    ```
 
-   The role can reach only this one instance, only as `ubuntu`, and only through the SSH session document. `transpire-deploy` is the role session name the workflow uses.
+   The role can only run shell commands on this one instance and read their results.
 
 4. Name the policy `transpire-deploy` and save. Copy the role ARN.
 
-### 6.4 Configure the GitHub `production` environment
+### 6.4 Add the GitHub Actions variables
 
-1. In GitHub: **repository → Settings → Environments → New environment**, and name it `production` (exactly; the trust policy depends on it).
-2. Under **Deployment branches and tags**, choose **Selected branches and tags** and add `main`. This stops other branches deploying.
-3. Optional: under **Required reviewers**, add people who must approve each deploy.
-4. Under **Environment variables**, add:
+1. In GitHub: **repository → Settings → Secrets and variables → Actions → Variables tab → New repository variable**.
+2. Add each of these:
 
-   | Name | Value |
+   | Name | Guide value |
    | --- | --- |
-   | `AWS_REGION` | `<region>` |
-   | `AWS_ROLE_ARN` | ARN of `transpire-github-deploy` |
-   | `EC2_INSTANCE_ID` | `<instance-id>` (e.g. `i-0abc...`) |
-   | `APP_DOMAIN` | `transpire.your-company.com` (no scheme, no slash) |
+   | `AWS_REGION` | `<region>`, e.g. `ap-south-1` |
+   | `AWS_ROLE_ARN` | `arn:aws:iam::<account-id>:role/transpire-github-deploy` |
+   | `EC2_INSTANCE_ID` | `<instance-id>`, e.g. `i-0abc1234def567890` |
+   | `APP_DOMAIN` | `transpire.your-company.com` (used only by the smoke test) |
    | `APP_DIR` | `/opt/transpire` (optional; this is the default) |
 
-   No secrets are needed for AWS access (OIDC) or SSH (a fresh key per run).
+   No GitHub secrets are needed: AWS access uses OIDC.
 
-5. Under **Environment secrets** (and optionally **Environment variables**), add the application settings from **section 5.3**. At minimum: `DATABASE_URL`, `OUTBOX_ENCRYPTION_KEY` and `EMAIL_FROM_ADDRESS`.
-
-6. The Deploy workflow runs after the `CI` workflow succeeds on `main`. Both workflow files must be on `main` for the trigger to fire.
+3. The Deploy workflow runs after the `CI` workflow succeeds on `main`. Both workflow files must be on `main` for the trigger to fire.
 
 ---
 
 ## 7. First deployment
 
-1. Commit and push to `main` (or, if the code is already there, open **Actions → Deploy → Run workflow**, keep **Branch: main**, leave **commit_sha** empty, and run it).
-2. Watch **Actions → CI**, then **Actions → Deploy**. The first run takes 6–12 minutes: building both images, then streaming roughly 250–400 MB to the server. Later runs reuse the build cache.
-3. Open the **Roll out** step. A successful run ends with the `docker compose ps` table and `==> Deployed <sha>`. If **Write backend settings on the server** fails with `Missing required production settings: …`, add those settings (section 5.3) and re-run the job. If the images were already pushed, the re-run skips the build.
-4. On the server, confirm the recorded tag and the running containers:
+1. Commit and push to `main`. If the code is already there, open **Actions → Deploy → Run workflow**, keep **Branch: main**, leave **commit_sha** empty, and run it.
+2. Watch **Actions → CI**, then **Actions → Deploy**. The first run takes 5–10 minutes, because the server builds both images from scratch. Later builds reuse Docker's cache.
+3. Expand **Server output** in the deploy step. A successful run ends with the `docker compose ps` table and `==> Deployed`.
+
+   You can also see each run in **AWS → Systems Manager → Run Command → Command history**.
+
+4. On the server, confirm the deployed commit and the running containers:
 
    ```bash
-   grep IMAGE_TAG /opt/transpire/deploy/.env
+   git -C /opt/transpire log -1 --oneline
    ```
 
    ```bash
@@ -593,7 +541,7 @@ Skip this if the provider already exists in the account.
 
 The **Smoke test** step fails on this first run, because Nginx isn't set up until step 9. That's expected: re-run the job after step 9.
 
-If the **Roll out** output shows a database error during `alembic upgrade head`, see **Troubleshooting → Database connection**.
+If the server output shows a database error during `alembic upgrade head`, see **Troubleshooting → Database connection**.
 
 ---
 
@@ -783,19 +731,23 @@ sudo systemctl reload nginx
 ## 11. Turn on real email
 
 1. Get SMTP credentials (e.g. Amazon SES SMTP, or Microsoft 365 / Exchange relay).
-2. In **GitHub → Settings → Environments → production**, set:
+2. Edit `/opt/transpire/deploy/backend.env`:
 
-   | Name | Value |
-   | --- | --- |
-   | `EMAIL_BACKEND` | `smtp` |
-   | `SMTP_HOST` | e.g. `email-smtp.ap-south-1.amazonaws.com` |
-   | `SMTP_PORT` | `587` |
-   | `SMTP_USERNAME` (secret) | your SMTP user |
-   | `SMTP_PASSWORD` (secret) | your SMTP password |
-   | `SMTP_START_TLS` | `true` |
-   | `SMTP_USE_TLS` | `false` |
+   ```
+   EMAIL_BACKEND=smtp
+   SMTP_HOST=email-smtp.ap-south-1.amazonaws.com
+   SMTP_PORT=587
+   SMTP_USERNAME=<smtp-user>
+   SMTP_PASSWORD=<smtp-password>
+   SMTP_START_TLS=true
+   SMTP_USE_TLS=false
+   ```
 
-3. Apply the change by redeploying the current version (step 13.4). This takes about a minute and needs no rebuild.
+3. Apply the change. Settings-only changes need no rebuild:
+
+   ```bash
+   dc up -d backend email-worker
+   ```
 
 4. Trigger a password reset for a test user and watch delivery:
 
@@ -812,8 +764,12 @@ If using SES, verify the sender domain and move the account out of the SES sandb
 1. In the Entra app registration → **Authentication → Web → Redirect URIs**, add:
    - `https://<APP_DOMAIN>/api/v1/auth/sso/global/callback`
    - `https://<APP_DOMAIN>/api/v1/t/<tenant-slug>/auth/sso/callback`, once for each tenant that uses SSO
-2. In the GitHub `production` environment, set `ENTRA_CLIENT_ID` and the secret `ENTRA_CLIENT_SECRET`.
-3. Apply by redeploying the current version (step 13.4).
+2. Set `ENTRA_CLIENT_ID` and `ENTRA_CLIENT_SECRET` in `/opt/transpire/deploy/backend.env`.
+3. Apply:
+
+   ```bash
+   dc up -d backend
+   ```
 
 ---
 
@@ -822,34 +778,30 @@ If using SES, verify the sender domain and move the account out of the SES sandb
 ### 13.1 Normal releases
 
 1. Merge or push to `main`.
-2. CI runs; if it passes, **Deploy** starts on its own (after approval, if reviewers are configured).
-3. Check the Deploy run: every step green, ending with **Smoke test**.
+2. CI runs; if it passes, **Deploy** starts on its own.
+3. Check the Deploy run: the SSM step and **Smoke test** are green.
 
 Only one deploy runs at a time; later runs queue behind it.
 
-**When code adds a new backend setting**, add it in the same change to:
+**When a change adds backend settings**, add the new keys to `/opt/transpire/deploy/backend.env` on the server **before** merging. Deploys don't edit that file. To see what changed in the template, run this on your laptop:
 
-- `.github/scripts/render-backend-env.sh`: one `emit NAME "${NAME:-default}"` line,
-- the `env:` block of the **Write backend settings on the server** step in `.github/workflows/deploy.yml`: `NAME: ${{ secrets.NAME || vars.NAME }}`,
-- the table in section 5.3 of this guide.
+```bash
+git diff <deployed-sha> origin/main -- deploy/backend.env.example
+```
 
-Then set its value in GitHub before merging.
-
-**Changing the domain** means updating the `APP_DOMAIN` GitHub variable and Nginx (the backend URLs follow automatically). The frontend image for the current commit must then be rebuilt: push a new commit to `main` (an empty commit is fine: `git commit --allow-empty -m "Rebuild for new domain"`).
+**Changing the domain:** update `APP_DOMAIN` in `deploy/.env` (it is baked into the frontend), `backend.env`, Nginx and the GitHub variable, then redeploy.
 
 ### 13.2 What happens if a deploy fails
 
-- **Build or image transfer fails:** nothing changes on the running app.
-- **Migration fails:** `deploy.sh` stops before restarting the containers, so the old version keeps running.
-- **Health checks fail after restart:** `deploy.sh` restores the containers to the previous tag, prints the logs into the workflow output, and marks the run failed. Database migrations are **not** reverted.
+- **`git fetch` or build fails:** the running containers are untouched.
+- **Migration fails:** the script stops before restarting, so the old containers keep running.
+- **Health checks fail after restart:** the script prints the logs into the workflow output and the run fails. Roll back with step 13.3.
 
-### 13.3 Rolling back or redeploying a specific version
+### 13.3 Rolling back
 
-1. Find the commit SHA to return to. `PREVIOUS_IMAGE_TAG` in `/opt/transpire/deploy/.env` is the last version before the current one, or use any earlier successful Deploy run.
+1. Find the last good commit SHA, from an earlier successful Deploy run or `git log` on your laptop.
 2. **Actions → Deploy → Run workflow**, **Branch: main**, and paste the full 40-character SHA into **commit_sha**.
-3. Run it. The server keeps the last 5 releases' images, so for those the build is skipped and the rollback takes about a minute. Older SHAs are rebuilt from that commit first.
-
-The `deploy/` files (compose file, `deploy.sh`) from that commit are pushed too, so the server matches the version you roll back to.
+3. Run it. The server checks out that commit, rebuilds and restarts. Docker's cache usually makes this quick.
 
 Migrations are **not** reversed automatically. If the release you are leaving added a migration the older code can't handle, restore the pre-release backup (step 14) or, after reviewing it, run:
 
@@ -857,24 +809,10 @@ Migrations are **not** reversed automatically. If the release you are leaving ad
 dc run --rm --no-deps backend alembic downgrade -1
 ```
 
-### 13.4 Applying a settings change without a new release
-
-1. Update the secret or variable in **GitHub → Settings → Environments → production**.
-2. Copy the deployed SHA, shown as `IMAGE_TAG` in `/opt/transpire/deploy/.env`, or the commit of the last successful Deploy run.
-3. **Actions → Deploy → Run workflow**, **Branch: main**, and paste that SHA into **commit_sha**.
-
-The images are already on the server, so the build is skipped. The workflow rewrites `backend.env`, and Compose recreates only the containers whose settings changed.
-
-### 13.5 Manual rollback on the server (if GitHub Actions is unavailable)
-
-This works for any SHA whose images are still on the server. It uses the `backend.env` already there:
+### 13.4 Manual deploy on the server (if GitHub Actions is unavailable)
 
 ```bash
-docker image ls transpire-backend
-```
-
-```bash
-bash /opt/transpire/deploy/deploy.sh <sha>
+cd /opt/transpire && git fetch origin && git checkout --detach origin/main && bash deploy/deploy.sh
 ```
 
 ---
@@ -911,7 +849,7 @@ bash /opt/transpire/deploy/deploy.sh <sha>
 
 - Copy dumps to S3, e.g. with `aws s3 sync /var/backups/transpire s3://<bucket>/transpire/` from cron. Attach an IAM instance role that can only write to that bucket.
 - Enable **EBS snapshots** with Amazon Data Lifecycle Manager (daily, keep 7).
-- Keep `OUTBOX_ENCRYPTION_KEY` and the database password in a password manager as well as GitHub: GitHub secrets can't be read back.
+- Keep `deploy/.env`, `deploy/backend.env` and `OUTBOX_ENCRYPTION_KEY` in a password manager or secret store. They are not in Git.
 
 ### 14.3 Test a restore (do this once)
 
@@ -937,12 +875,12 @@ sudo -u postgres dropdb transpire_restore_test
 | Follow all logs | `dc logs -f --tail 100` |
 | One service's logs | `dc logs -f backend` |
 | Restart one service | `dc restart backend` |
-| Apply settings changes | Update GitHub, then redeploy the current SHA (step 13.4) |
+| Apply `backend.env` changes | `dc up -d backend email-worker` |
 | Stop everything | `dc down` |
 | Start everything | `dc up -d` |
 | Shell in backend | `dc exec backend sh` |
 | Disk usage | `docker system df` and `df -h` |
-| Currently deployed version | `grep IMAGE_TAG /opt/transpire/deploy/.env` |
+| Currently deployed commit | `git -C /opt/transpire log -1 --oneline` |
 | Test and reload Nginx | `sudo nginx -t && sudo systemctl reload nginx` |
 | Nginx logs | `sudo tail -f /var/log/nginx/access.log /var/log/nginx/error.log` |
 
@@ -959,40 +897,34 @@ Containers use `restart: unless-stopped`, so they come back after a reboot. Logs
 - `password authentication failed`: the password in `DATABASE_URL` is wrong or contains characters that need URL-encoding. Regenerate it with the `tr -d '/+='` command from 3.1.
 
 **Deploy job: `Could not assume role` / `Not authorized to perform sts:AssumeRoleWithWebIdentity`**
-The trust policy `sub` doesn't match. It must be exactly `repo:<org>/<repo>:environment:production`, and the workflow job must use the `production` environment.
+The trust policy `sub` doesn't match. It must be exactly `repo:<org>/<repo>:ref:refs/heads/main` (owner and repo names are case-sensitive), and the run must be from `main`. A manual run with **Branch** set to anything else is refused.
 
-**`TargetNotConnected` or `is not connected` when opening the SSH session**
+**`InvalidInstanceId` from `send-command`**
 The instance isn't registered with SSM. Check Fleet Manager (step 6.2), that the `transpire-ec2` role is attached, and that the SSM agent is running (step 2.5).
 
-**`AccessDeniedException` calling `StartSession` or `SendSSHPublicKey`**
+**`AccessDeniedException` calling `SendCommand`**
 The inline policy's region, account ID or instance ID doesn't match (step 6.3).
 
-**`Permission denied (publickey)`**
-EC2 Instance Connect isn't installed on the server (step 2.5), or more than 60 seconds passed between pushing the key and connecting. Re-run the job; if it persists, check `sudo journalctl -u ssh --since "10 min ago"` on the server.
+**Server output: `Permission denied (publickey)` during `git fetch`**
+The deploy key isn't set up for the `ubuntu` user (step 4). Test with `ssh -T git@github.com` as `ubuntu`.
 
-**`Image transpire-backend:<sha> is not on this host`**
-A manual rollback named a release that has been pruned. Run **Actions → Deploy** with that `commit_sha` instead, which rebuilds it.
+**Server output: `detected dubious ownership in repository`**
+`/opt/transpire` isn't owned by `ubuntu`. Fix with `sudo chown -R ubuntu:ubuntu /opt/transpire`.
 
-**Image transfer is very slow or the session drops**
-SSM tunnels are slower than direct SSH. Check the instance has outbound internet (or VPC endpoints for `ssm`, `ssmmessages` and `ec2messages`), then re-run.
+**SSM status `TimedOut`, or the build is killed (exit code 137)**
+The build ran out of memory or time. Confirm swap is active (`free -h`, step 2.3) or use a larger instance.
 
 **`Commit must be a full 40-character SHA`**
 When rolling back, paste the full SHA, not the short one.
 
 **Backend exits immediately**
-Run `dc logs backend`. `OUTBOX_ENCRYPTION_KEY is invalid` means the secret isn't a valid Fernet key; regenerate it as in step 5.2 (only if no emails are queued). `validation error` names the setting with a wrong value in GitHub (section 5.3).
-
-**Write backend settings step: `Missing required production settings`**
-Add the named secrets or variables to the `production` environment (section 5.3). Names are case-sensitive.
-
-**Write backend settings step: `… must not contain single quotes or line breaks`**
-Re-enter the value without `'` or a trailing newline. For a password, regenerate it with the command in step 3.1.
+Run `dc logs backend`. `SESSION_COOKIE_SECURE must be true` or `OUTBOX_ENCRYPTION_KEY is required` means a value in `deploy/backend.env` is missing.
 
 **`400 Invalid host header`**
-The site is being reached on a hostname other than `APP_DOMAIN` (or an `ALLOWED_HOSTS` override leaves it out), or Nginx isn't sending `proxy_set_header Host $host`. Fix the GitHub setting and redeploy (step 13.4), or fix and reload Nginx.
+`ALLOWED_HOSTS` in `backend.env` doesn't contain the exact `APP_DOMAIN`, or Nginx isn't sending `proxy_set_header Host $host`. Fix it, then run `dc up -d backend` (or reload Nginx).
 
 **Browser calls `localhost:8000` or the wrong domain, or shows CORS errors**
-The `APP_DOMAIN` GitHub variable was wrong or missing when the frontend image was built. Fix it, then follow **Changing the domain** in step 13.1 to force a rebuild.
+`APP_DOMAIN` in `deploy/.env` was wrong when the frontend was built. Fix it, then run `bash /opt/transpire/deploy/deploy.sh` (or redeploy from GitHub).
 
 **Sign-in works but saving anything returns 403 (CSRF)**
 The site is being opened on a different hostname from `APP_DOMAIN` (e.g. the raw IP). Always use the domain.
@@ -1009,7 +941,6 @@ DNS doesn't point at the Elastic IP yet, port 80 is closed in the security group
 **Users are logged out immediately, or the browser shows "Not secure"**
 The site is being served over plain HTTP. Session cookies are `Secure`, so it must be HTTPS end to end at Nginx.
 
-
 **Emails stay queued**
 Run `dc logs email-worker`. Check the SMTP settings, and that `OUTBOX_ENCRYPTION_KEY` has not changed since the emails were queued.
 
@@ -1023,6 +954,5 @@ Run `dc logs email-worker`. Check the SMTP settings, and that `OUTBOX_ENCRYPTION
 - [ ] Uptime check on `https://<APP_DOMAIN>/health/ready`
 - [ ] TLS expiry monitoring (certbot renewals succeed, or the company certificate renewal is on the calendar)
 - [ ] Backups copied off-host and a restore tested (step 14)
-- [ ] `OUTBOX_ENCRYPTION_KEY` and the database password backed up outside GitHub
-- [ ] Required reviewers set on the GitHub `production` environment
+- [ ] `OUTBOX_ENCRYPTION_KEY` and the database password backed up off the server
 - [ ] DNS TTL raised back to 3600 once stable
