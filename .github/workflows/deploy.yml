@@ -40,6 +40,22 @@ jobs:
           fi
           echo "value=$SHA" >> "$GITHUB_OUTPUT"
 
+      - name: Check repository variables
+        env:
+          AWS_REGION: ${{ vars.AWS_REGION }}
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+          EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+        run: |
+          missing=()
+          for name in AWS_REGION AWS_ROLE_ARN EC2_INSTANCE_ID APP_DOMAIN; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::Missing repository variables: ${missing[*]}. Add them under Settings → Secrets and variables → Actions → Variables (repository variables, not secrets or environment variables)."
+            exit 1
+          fi
+
       - uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
