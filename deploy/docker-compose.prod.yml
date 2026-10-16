@@ -2,10 +2,9 @@
 # (natively on this host or on a separate server) and is reached via DATABASE_URL.
 # Nginx on the host terminates TLS and proxies to the loopback-only ports below.
 #
-# Images are built by .github/workflows/deploy.yml, streamed to this host over
-# SSH-through-SSM and loaded locally; there is no registry. deploy/deploy.sh
-# rolls them out. Compose reads IMAGE_TAG from deploy/.env, and deploy.sh
-# overrides it from the shell during a rollout.
+# Images are built on this host from the checked-out repo by deploy/deploy.sh,
+# which the GitHub Actions Deploy workflow runs through AWS SSM.
+# Compose reads deploy/.env for APP_DOMAIN.
 
 name: transpire
 
@@ -17,8 +16,11 @@ x-logging: &default-logging
 
 services:
   frontend:
-    image: transpire-frontend:${IMAGE_TAG:?Set IMAGE_TAG}
-    pull_policy: never
+    build:
+      context: ../frontend
+      args:
+        NEXT_PUBLIC_API_URL: https://${APP_DOMAIN:?Set APP_DOMAIN in deploy/.env}/api/v1
+    image: transpire-frontend:latest
     restart: unless-stopped
     ports:
       - "127.0.0.1:3000:3000"
@@ -32,8 +34,9 @@ services:
     logging: *default-logging
 
   backend:
-    image: transpire-backend:${IMAGE_TAG:?Set IMAGE_TAG}
-    pull_policy: never
+    build:
+      context: ../backend
+    image: transpire-backend:latest
     restart: unless-stopped
     env_file:
       - ./backend.env
@@ -61,7 +64,7 @@ services:
     logging: *default-logging
 
   email-worker:
-    image: transpire-backend:${IMAGE_TAG:?Set IMAGE_TAG}
+    image: transpire-backend:latest
     pull_policy: never
     restart: unless-stopped
     env_file:
