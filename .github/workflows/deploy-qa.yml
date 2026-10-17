@@ -45,6 +45,7 @@ jobs:
               ("sudo -H -u ubuntu bash -c " +
                 ("set -euo pipefail; cd " + ($dir | @sh) +
                  "; git fetch --no-tags origin " + ($sha | @sh) +
+                 "; git reset --hard HEAD" +
                  "; git checkout --detach " + ($sha | @sh) +
                  "; bash deploy/deploy.sh" | @sh))
             ],

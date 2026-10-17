@@ -7,9 +7,12 @@ Docker and manually approved deployment configuration belongs here. The root `do
 The `Deploy QA` workflow targets `/home/ubuntu/transpire` on the configured
 instance. SSM starts the command as root, then switches to `ubuntu`, fetches the
 commit that triggered the workflow, and checks it out before running the tracked
-`deploy/deploy.sh`. A server-only root `deploy.sh` is not used. The checkout must
-have no conflicting tracked edits, and `ubuntu` must have Git access to the
-repository and permission to use Docker Compose.
+`deploy/deploy.sh`. Before checkout, `git reset --hard HEAD` discards any staged
+or unstaged edits to tracked server files. No backup or stash is created.
+Ignored configuration and untracked files stay in place; a conflicting untracked
+file still blocks checkout. A server-only root `deploy.sh` is not used. The
+`ubuntu` user must have Git access to the repository and permission to use Docker
+Compose.
 
 Keep server configuration in these ignored files:
 
