@@ -91,6 +91,8 @@ async def seed() -> None:
             user.display_name = settings.development_admin_name
             user.password_hash = hash_password(password)
             user.is_platform_admin = True
+            user.failed_sign_in_attempts = 0
+            user.locked_until = None
 
         membership = await session.scalar(
             select(Membership).where(
