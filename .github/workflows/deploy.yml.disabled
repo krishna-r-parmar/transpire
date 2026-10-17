@@ -46,9 +46,10 @@ jobs:
           AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
           EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
           APP_DOMAIN: ${{ vars.APP_DOMAIN }}
+          APP_DIR: ${{ vars.APP_DIR }}
         run: |
           missing=()
-          for name in AWS_REGION AWS_ROLE_ARN EC2_INSTANCE_ID APP_DOMAIN; do
+          for name in AWS_REGION AWS_ROLE_ARN EC2_INSTANCE_ID APP_DOMAIN APP_DIR; do
             [[ -n "${!name}" ]] || missing+=("$name")
           done
           if (( ${#missing[@]} )); then
@@ -65,7 +66,7 @@ jobs:
         env:
           SHA: ${{ steps.sha.outputs.value }}
           INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
-          APP_DIR: ${{ vars.APP_DIR || '/opt/transpire' }}
+          APP_DIR: ${{ vars.APP_DIR }}
         run: |
           parameters=$(jq -nc --arg dir "$APP_DIR" --arg sha "$SHA" '{
             commands: [

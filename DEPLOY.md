@@ -491,7 +491,7 @@ Skip this if the provider already exists in the account.
    | `AWS_ROLE_ARN` | `arn:aws:iam::<account-id>:role/transpire-github-deploy` |
    | `EC2_INSTANCE_ID` | `<instance-id>`, e.g. `i-0abc1234def567890` |
    | `APP_DOMAIN` | `transpire.your-company.com` (used only by the smoke test) |
-   | `APP_DIR` | `/opt/transpire` (optional; this is the default) |
+   | `APP_DIR` | `/opt/transpire` (required; path of the repo clone on the server) |
 
    No GitHub secrets are needed: AWS access uses OIDC.
 
