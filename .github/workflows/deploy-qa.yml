@@ -9,13 +9,22 @@ permissions:
   id-token: write
   contents: read
 
-concurrency: deploy-qa
+concurrency:
+  group: deploy-qa
+  cancel-in-progress: false
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 55
+    defaults:
+      run:
+        shell: bash
     env:
       INSTANCE_ID: i-0edc0d79289958bca
+      APP_DIR: /home/ubuntu/transpire
+      AWS_PAGER: ""
+      AWS_MAX_ATTEMPTS: "3"
     steps:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -23,25 +32,65 @@ jobs:
           aws-region: ap-south-1
 
       - name: Run deploy on server
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
         run: |
+          set -euo pipefail
+          [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid deployment SHA"; exit 1; }
+
+          # SSM runs as root. Git and Docker must run as the repository owner.
+          # Fetch the triggering commit before invoking the tracked deploy script.
+          parameters=$(jq -nc --arg dir "$APP_DIR" --arg sha "$DEPLOY_SHA" '{
+            commands: [
+              ("sudo -H -u ubuntu bash -c " +
+                ("set -euo pipefail; cd " + ($dir | @sh) +
+                 "; git fetch --no-tags origin " + ($sha | @sh) +
+                 "; git checkout --detach " + ($sha | @sh) +
+                 "; bash deploy/deploy.sh" | @sh))
+            ],
+            executionTimeout: ["1800"]
+          }')
           ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name AWS-RunShellScript \
-            --parameters '{"commands":["sudo -H -u ubuntu bash -c '\''cd /home/ubuntu/transpire && bash ./deploy.sh'\''"],"executionTimeout":["1800"]}' \
+            --comment "TRANSPIRE deploy ${DEPLOY_SHA:0:12}" \
+            --parameters "$parameters" \
             --timeout-seconds 900 \
             --query Command.CommandId --output text)
           echo "SSM command: $ID"
+          echo "Deploying commit: $DEPLOY_SHA"
 
-          # `aws ssm wait command-executed` gives up after ~100s, which is
-          # shorter than a server-side build, so poll for up to 30 minutes.
-          STATUS=Pending
-          for _ in $(seq 1 360); do
+          # Allow both delivery (900s) and execution (1800s), with a margin.
+          deadline=$((SECONDS + 2820))
+          error_file=$(mktemp)
+          trap 'rm -f "$error_file"' EXIT
+          while (( SECONDS < deadline )); do
+            if invocation=$(aws ssm get-command-invocation \
+              --command-id "$ID" --instance-id "$INSTANCE_ID" \
+              --cli-connect-timeout 10 --cli-read-timeout 30 \
+              --output json 2>"$error_file"); then
+              STATUS=$(jq -r '.Status' <<< "$invocation")
+              case "$STATUS" in
+                Success|Failed|Cancelled|TimedOut)
+                  echo "::group::Server output"
+                  jq -r '.StandardOutputContent, .StandardErrorContent' <<< "$invocation"
+                  echo "::endgroup::"
+                  echo "SSM status: $STATUS; response code: $(jq -r '.ResponseCode' <<< "$invocation")"
+                  if [[ "$STATUS" == Success ]] && [[ "$(jq -r '.ResponseCode' <<< "$invocation")" == 0 ]]; then
+                    exit 0
+                  fi
+                  echo "::error::Server deployment failed. See server output above (SSM command $ID)."
+                  exit 1
+                  ;;
+                Pending|InProgress|Delayed|Cancelling) ;;
+                *) echo "::error::Unexpected SSM status: $STATUS"; exit 1 ;;
+              esac
+            elif ! grep -q 'InvocationDoesNotExist' "$error_file"; then
+              cat "$error_file" >&2
+              echo "::error::Could not read SSM command $ID. Check GetCommandInvocation permission and AWS connectivity."
+              exit 1
+            fi
             sleep 5
-            STATUS=$(aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" \
-              --query Status --output text 2>/dev/null || echo Pending)
-            case "$STATUS" in Success|Failed|Cancelled|TimedOut) break ;; esac
           done
-
-          aws ssm get-command-invocation --command-id "$ID" --instance-id "$INSTANCE_ID" \
-            --query '{Status:Status,Out:StandardOutputContent,Err:StandardErrorContent}' --output yaml
-          [ "$STATUS" = "Success" ]
+          echo "::error::Timed out monitoring SSM command $ID. It may still be running; check Systems Manager before retrying."
+          exit 1
