@@ -27,7 +27,7 @@ jobs:
           ID=$(aws ssm send-command \
             --instance-ids "$INSTANCE_ID" \
             --document-name AWS-RunShellScript \
-            --parameters '{"commands":["bash /home/ubuntu/deploy-transpire.sh"],"executionTimeout":["1800"]}' \
+            --parameters '{"commands":["sudo -H -u ubuntu bash -c '\''cd /home/ubuntu/transpire && bash ./deploy.sh'\''"],"executionTimeout":["1800"]}' \
             --timeout-seconds 900 \
             --query Command.CommandId --output text)
           echo "SSM command: $ID"
