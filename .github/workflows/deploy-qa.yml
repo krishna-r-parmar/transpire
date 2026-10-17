@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::541389077950:role/actions-deploy-transpire
+          role-to-assume: arn:aws:iam::541389077950:role/Actions-deploy-transpire
           aws-region: ap-south-1
 
       - name: Run deploy on server
