@@ -5,25 +5,27 @@
 set -euo pipefail
 
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HEALTH_TIMEOUT_SECONDS=180
+REPO_DIR="$(cd "$DEPLOY_DIR/.." && pwd)"
+
+# Root settings are optional; frontend settings override them for build inputs.
+COMPOSE_ENV_ARGS=()
+[[ ! -f "$REPO_DIR/.env" ]] || COMPOSE_ENV_ARGS+=(--env-file "$REPO_DIR/.env")
+COMPOSE_ENV_ARGS+=(--env-file "$REPO_DIR/frontend/.env")
 
 compose() {
-  docker compose --project-directory "$DEPLOY_DIR" -f "$DEPLOY_DIR/docker-compose.prod.yml" "$@"
+  docker compose --project-directory "$DEPLOY_DIR" "${COMPOSE_ENV_ARGS[@]}" \
+    -f "$DEPLOY_DIR/docker-compose.prod.yml" "$@"
 }
 
-wait_for_health() {
-  local deadline=$((SECONDS + HEALTH_TIMEOUT_SECONDS))
-  until curl -fsS http://127.0.0.1:8000/health/ready >/dev/null 2>&1 \
-    && curl -fsS -o /dev/null http://127.0.0.1:3000/ 2>/dev/null; do
-    if (( SECONDS >= deadline )); then
-      return 1
-    fi
-    sleep 5
-  done
-}
+for file in "$REPO_DIR/backend/.env" "$REPO_DIR/frontend/.env"; do
+  [[ -r "$file" ]] || { echo "Missing or unreadable $file" >&2; exit 1; }
+done
 
-[[ -f "$DEPLOY_DIR/.env" ]] || { echo "Missing $DEPLOY_DIR/.env (copy compose.env.example)" >&2; exit 1; }
-[[ -f "$DEPLOY_DIR/backend.env" ]] || { echo "Missing $DEPLOY_DIR/backend.env (copy backend.env.example)" >&2; exit 1; }
+command -v docker >/dev/null
+docker compose version >/dev/null
+docker info >/dev/null
+# Validate without printing resolved environment values into deployment logs.
+compose config --quiet
 
 echo "==> Deploying $(git -C "$DEPLOY_DIR" log -1 --format='%h %s')"
 
@@ -34,19 +36,7 @@ echo "==> Running database migrations"
 compose run --rm --no-deps backend alembic upgrade head
 
 echo "==> Restarting containers"
-compose up -d --no-build --remove-orphans
+# Target application services explicitly; leave the separate Nginx container alone.
+compose up -d --no-build --no-deps backend frontend email-worker
 
-echo "==> Waiting for health checks"
-if ! wait_for_health; then
-  echo "!! Health checks failed" >&2
-  compose ps >&2
-  compose logs --tail 80 backend frontend >&2
-  exit 1
-fi
-
-echo "==> Cleaning up old images and build cache"
-docker image prune -f >/dev/null
-docker builder prune -f --filter until=168h >/dev/null
-
-compose ps
-echo "==> Deployed"
+echo "==> Application containers restarted"
