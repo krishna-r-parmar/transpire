@@ -21,27 +21,101 @@ jobs:
       run:
         shell: bash
     env:
-      INSTANCE_ID: i-0edc0d79289958bca
-      APP_DIR: /home/ubuntu/transpire
+      INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID || 'i-0edc0d79289958bca' }}
+      APP_DIR: ${{ secrets.APP_DIR || '/home/ubuntu/transpire' }}
+      AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
+      ENV_PARAMETER: /transpire/qa/env
       AWS_PAGER: ""
       AWS_MAX_ATTEMPTS: "3"
     steps:
+      - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::541389077950:role/Actions-deploy-transpire
-          aws-region: ap-south-1
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN || 'arn:aws:iam::541389077950:role/Actions-deploy-transpire' }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Store deployment environment securely
+        id: environment
+        env:
+          CFG_APP_DOMAIN: ${{ secrets.APP_DOMAIN }}
+          CFG_ENVIRONMENT: ${{ secrets.ENVIRONMENT }}
+          CFG_DEBUG: ${{ secrets.DEBUG }}
+          CFG_DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CFG_ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+          CFG_CORS_ORIGINS: ${{ secrets.CORS_ORIGINS }}
+          CFG_CORS_ORIGIN_REGEX: ${{ secrets.CORS_ORIGIN_REGEX }}
+          CFG_PUBLIC_APP_URL: ${{ secrets.PUBLIC_APP_URL }}
+          CFG_PUBLIC_API_URL: ${{ secrets.PUBLIC_API_URL }}
+          CFG_SESSION_COOKIE_NAME: ${{ secrets.SESSION_COOKIE_NAME }}
+          CFG_CSRF_COOKIE_NAME: ${{ secrets.CSRF_COOKIE_NAME }}
+          CFG_SSO_SELECTION_COOKIE_NAME: ${{ secrets.SSO_SELECTION_COOKIE_NAME }}
+          CFG_SESSION_COOKIE_SECURE: ${{ secrets.SESSION_COOKIE_SECURE }}
+          CFG_SESSION_HOURS: ${{ secrets.SESSION_HOURS }}
+          CFG_REMEMBERED_SESSION_DAYS: ${{ secrets.REMEMBERED_SESSION_DAYS }}
+          CFG_PASSWORD_RESET_MINUTES: ${{ secrets.PASSWORD_RESET_MINUTES }}
+          CFG_INVITATION_EXPIRY_HOURS: ${{ secrets.INVITATION_EXPIRY_HOURS }}
+          CFG_SIGN_IN_RATE_LIMIT: ${{ secrets.SIGN_IN_RATE_LIMIT }}
+          CFG_PASSWORD_RESET_RATE_LIMIT: ${{ secrets.PASSWORD_RESET_RATE_LIMIT }}
+          CFG_AUTH_RATE_WINDOW_SECONDS: ${{ secrets.AUTH_RATE_WINDOW_SECONDS }}
+          CFG_AUTH_RATE_BLOCK_SECONDS: ${{ secrets.AUTH_RATE_BLOCK_SECONDS }}
+          CFG_ACCOUNT_LOCKOUT_ATTEMPTS: ${{ secrets.ACCOUNT_LOCKOUT_ATTEMPTS }}
+          CFG_ACCOUNT_LOCKOUT_MINUTES: ${{ secrets.ACCOUNT_LOCKOUT_MINUTES }}
+          CFG_WORKSPACE_SELECTION_MINUTES: ${{ secrets.WORKSPACE_SELECTION_MINUTES }}
+          CFG_OUTBOX_ENCRYPTION_KEY: ${{ secrets.OUTBOX_ENCRYPTION_KEY }}
+          CFG_OUTBOX_MAX_ATTEMPTS: ${{ secrets.OUTBOX_MAX_ATTEMPTS }}
+          CFG_OUTBOX_RETRY_BASE_SECONDS: ${{ secrets.OUTBOX_RETRY_BASE_SECONDS }}
+          CFG_OUTBOX_LEASE_SECONDS: ${{ secrets.OUTBOX_LEASE_SECONDS }}
+          CFG_EMAIL_BACKEND: ${{ secrets.EMAIL_BACKEND }}
+          CFG_EMAIL_FROM_ADDRESS: ${{ secrets.EMAIL_FROM_ADDRESS }}
+          CFG_EMAIL_FROM_NAME: ${{ secrets.EMAIL_FROM_NAME }}
+          CFG_SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          CFG_SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          CFG_SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
+          CFG_SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          CFG_SMTP_START_TLS: ${{ secrets.SMTP_START_TLS }}
+          CFG_SMTP_USE_TLS: ${{ secrets.SMTP_USE_TLS }}
+          CFG_SMTP_TIMEOUT_SECONDS: ${{ secrets.SMTP_TIMEOUT_SECONDS }}
+          CFG_ENTRA_CLIENT_ID: ${{ secrets.ENTRA_CLIENT_ID }}
+          CFG_ENTRA_CLIENT_SECRET: ${{ secrets.ENTRA_CLIENT_SECRET }}
+          CFG_OIDC_STATE_MINUTES: ${{ secrets.OIDC_STATE_MINUTES }}
+          CFG_SSO_RECOVERY_MINUTES: ${{ secrets.SSO_RECOVERY_MINUTES }}
+          CFG_FX_API_BASE_URL: ${{ secrets.FX_API_BASE_URL }}
+          CFG_FX_CACHE_MINUTES: ${{ secrets.FX_CACHE_MINUTES }}
+          CFG_NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          CFG_NEXT_PUBLIC_CSRF_COOKIE_NAME: ${{ secrets.NEXT_PUBLIC_CSRF_COOKIE_NAME }}
+        run: |
+          set -euo pipefail
+          umask 077
+          request_file=$(mktemp)
+          trap 'rm -f "$request_file"' EXIT
+          python3 deploy/render_env.py > "$request_file"
+          version=$(aws ssm put-parameter --cli-input-json "file://$request_file" \
+            --query Version --output text)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Run deploy on server
         env:
           DEPLOY_SHA: ${{ github.sha }}
+          ENV_VERSION: ${{ steps.environment.outputs.version }}
         run: |
           set -euo pipefail
           [[ "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Invalid deployment SHA"; exit 1; }
+          [[ "$ENV_VERSION" =~ ^[0-9]+$ ]] || { echo "::error::Invalid environment version"; exit 1; }
 
+          # Only the encrypted parameter reference goes into SSM command history.
+          # Root downloads it with the instance role, then atomically installs it.
           # SSM runs as root. Git and Docker must run as the repository owner.
           # Fetch the triggering commit before invoking the tracked deploy script.
-          parameters=$(jq -nc --arg dir "$APP_DIR" --arg sha "$DEPLOY_SHA" '{
+          parameters=$(jq -nc --arg dir "$APP_DIR" --arg sha "$DEPLOY_SHA" \
+            --arg parameter "$ENV_PARAMETER:$ENV_VERSION" --arg region "$AWS_REGION" '{
             commands: [
+              ("set -eu; umask 077; " +
+               "env_temp=$(mktemp " + (($dir + "/.env.XXXXXX") | @sh) + "); " +
+               "trap '\''rm -f \"$env_temp\"'\'' EXIT; " +
+               "aws ssm get-parameter --region " + ($region | @sh) + " --name " + ($parameter | @sh) +
+               " --with-decryption --query Parameter.Value --output text > \"$env_temp\"; " +
+               "test -s \"$env_temp\"; chown ubuntu:ubuntu \"$env_temp\"; chmod 600 \"$env_temp\"; " +
+               "mv -f \"$env_temp\" " + (($dir + "/.env") | @sh)),
               ("sudo -H -u ubuntu bash -c " +
                 ("set -euo pipefail; cd " + ($dir | @sh) +
                  "; git fetch --no-tags origin " + ($sha | @sh) +

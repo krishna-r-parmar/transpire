@@ -7,19 +7,17 @@ set -euo pipefail
 DEPLOY_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd "$DEPLOY_DIR/.." && pwd)"
 
-# Root settings are optional; frontend settings override them for build inputs.
-COMPOSE_ENV_ARGS=()
-[[ ! -f "$REPO_DIR/.env" ]] || COMPOSE_ENV_ARGS+=(--env-file "$REPO_DIR/.env")
-COMPOSE_ENV_ARGS+=(--env-file "$REPO_DIR/frontend/.env")
-
-compose() {
-  docker compose --project-directory "$DEPLOY_DIR" "${COMPOSE_ENV_ARGS[@]}" \
-    -f "$DEPLOY_DIR/docker-compose.prod.yml" "$@"
+# One server environment file supplies service settings and public build inputs.
+ENV_FILE="$REPO_DIR/.env"
+[[ -r "$ENV_FILE" && -s "$ENV_FILE" ]] || {
+  echo "Missing, empty, or unreadable $ENV_FILE; run deployment with the required GitHub Actions secrets" >&2
+  exit 1
 }
 
-for file in "$REPO_DIR/backend/.env" "$REPO_DIR/frontend/.env"; do
-  [[ -r "$file" ]] || { echo "Missing or unreadable $file" >&2; exit 1; }
-done
+compose() {
+  docker compose --project-name transpire --project-directory "$DEPLOY_DIR" --env-file "$ENV_FILE" \
+    -f "$DEPLOY_DIR/docker-compose.prod.yml" "$@"
+}
 
 command -v docker >/dev/null
 docker compose version >/dev/null

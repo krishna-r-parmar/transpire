@@ -132,14 +132,20 @@ async def test_console_transport_returns_correlation_identifier() -> None:
 
 
 @pytest.mark.asyncio
-async def test_smtp_transport_uses_certifi_ca_bundle(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.parametrize("port", [25, 587])
+async def test_smtp_transport_uses_certifi_ca_bundle(
+    monkeypatch: pytest.MonkeyPatch, port: int
+) -> None:
     captured_options: dict[str, object] = {}
 
     async def fake_send(*args: object, **kwargs: object) -> None:
         captured_options.update(kwargs)
 
     monkeypatch.setattr("app.domains.communications.services.aiosmtplib.send", fake_send)
-    settings = Settings(EMAIL_BACKEND="smtp", SMTP_HOST="smtp.example.com")
+    settings = Settings(
+        EMAIL_BACKEND="smtp", SMTP_HOST="smtp.example.com", SMTP_PORT=port,
+        SMTP_USERNAME="", SMTP_PASSWORD="", SMTP_START_TLS=True, SMTP_USE_TLS=False,
+    )
     rendered = EmailTemplateRenderer().render(
         EmailMessage(
             tenant_id=uuid.uuid4(),
@@ -153,3 +159,8 @@ async def test_smtp_transport_uses_certifi_ca_bundle(monkeypatch: pytest.MonkeyP
     await SMTPEmailTransport(settings).send(rendered)
 
     assert captured_options["cert_bundle"] == certifi.where()
+    assert captured_options["port"] == port
+    assert captured_options["username"] is None
+    assert captured_options["password"] is None
+    assert captured_options["start_tls"] is True
+    assert captured_options["use_tls"] is False

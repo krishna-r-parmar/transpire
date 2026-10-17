@@ -4,7 +4,7 @@
 #
 # Images are built on this host from the checked-out repo by deploy/deploy.sh,
 # which the GitHub Actions Deploy workflow runs through AWS SSM.
-# Deploy loads frontend/.env for build inputs and backend/.env for services.
+# Deploy loads the root .env for public build inputs and backend services.
 
 name: transpire
 
@@ -19,7 +19,7 @@ services:
     build:
       context: ../frontend
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL in frontend/.env}
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?Set NEXT_PUBLIC_API_URL in the root .env}
         NEXT_PUBLIC_CSRF_COOKIE_NAME: ${NEXT_PUBLIC_CSRF_COOKIE_NAME:-transpire_csrf}
     image: transpire-frontend:latest
     restart: unless-stopped
@@ -40,7 +40,7 @@ services:
     image: transpire-backend:latest
     restart: unless-stopped
     env_file:
-      - ../backend/.env
+      - ../.env
     ports:
       - "127.0.0.1:8000:8000"
     # Port 8000 is bound to loopback only, so the sole external client is the
@@ -69,7 +69,7 @@ services:
     pull_policy: never
     restart: unless-stopped
     env_file:
-      - ../backend/.env
+      - ../.env
     command: ["python", "scripts/process_email_outbox.py", "--watch"]
     extra_hosts:
       - "host.docker.internal:host-gateway"
