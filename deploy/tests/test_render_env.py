@@ -13,7 +13,7 @@ spec.loader.exec_module(render_env)
 class RenderEnvTests(unittest.TestCase):
     def setUp(self):
         self.settings = {
-            "ENV_PARAMETER": "/transpire/qa/env",
+            "ENV_PARAMETER": "/transpire/env",
             "CFG_APP_DOMAIN": "qa.example.com",
             "CFG_DATABASE_URL": "postgresql+asyncpg://app:encoded@db/app",
             "CFG_OUTBOX_ENCRYPTION_KEY": "existing-key",

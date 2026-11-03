@@ -11,12 +11,7 @@ export default function ForgotPasswordPage() {
   return (
     <>
       <ForgotPasswordForm />
-      <EnterpriseFooter
-        journeyHref="/#movement"
-        platformHref="/#platform"
-        impactHref="/#impact"
-        topHref="#forgot-password-top"
-      />
+      <EnterpriseFooter topHref="#forgot-password-top" />
     </>
   );
 }

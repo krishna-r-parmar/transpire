@@ -14,6 +14,7 @@ type AdminShellProps = {
   eyebrow: string;
   title: string;
   description: string;
+  actions?: ReactNode;
   children: ReactNode;
 };
 
@@ -23,6 +24,7 @@ export function AdminShell({
   eyebrow,
   title,
   description,
+  actions,
   children,
 }: AdminShellProps) {
   return (
@@ -37,9 +39,12 @@ export function AdminShell({
 
       <main className={styles.main}>
         <header className={styles.pageHeader}>
-          <p>{eyebrow}</p>
-          <h1>{title}</h1>
-          <span>{description}</span>
+          <div>
+            <p>{eyebrow}</p>
+            <h1>{title}</h1>
+            <span>{description}</span>
+          </div>
+          {actions ? <div className={styles.pageActions}>{actions}</div> : null}
         </header>
         {children}
       </main>

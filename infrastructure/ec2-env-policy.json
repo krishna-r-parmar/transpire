@@ -4,7 +4,7 @@
     {
       "Effect": "Allow",
       "Action": "ssm:GetParameter",
-      "Resource": "arn:aws:ssm:ap-south-1:541389077950:parameter/transpire/qa/env"
+      "Resource": "arn:aws:ssm:ap-south-1:541389077950:parameter/transpire/env"
     }
   ]
 }

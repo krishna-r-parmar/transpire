@@ -2,20 +2,40 @@
 
 import { ArrowRight, MailCheck, TriangleAlert } from "lucide-react";
 import { TenantLink as Link } from "@/components/app/tenant-link";
-import { FormEvent, useState } from "react";
+import { usePathname } from "next/navigation";
+import { FormEvent, useEffect, useState } from "react";
 import { RecoveryShell } from "@/components/auth/recovery-shell";
 import { apiRequest } from "@/lib/api";
+import { tenantSlugFromPathname } from "@/lib/tenant-routing";
+import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import styles from "./recovery.module.css";
 
 export function ForgotPasswordForm() {
+  const router = useRouter();
+  const tenantSlug = tenantSlugFromPathname(usePathname());
+  const [ssoEnabled, setSsoEnabled] = useState(false);
   const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [serviceError, setServiceError] = useState(false);
 
+  useEffect(() => {
+    if (!tenantSlug) return;
+    let active = true;
+    apiRequest("/auth/sso/status")
+      .then(async (response) => response.ok ? await response.json() as { enabled: boolean } : { enabled: false })
+      .then((result) => { if (active) setSsoEnabled(result.enabled); })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [tenantSlug]);
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (ssoEnabled) {
+      router.push("/sign-in");
+      return;
+    }
     setError("");
     setServiceError(false);
     const normalizedEmail = email.trim();

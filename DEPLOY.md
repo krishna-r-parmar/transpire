@@ -762,8 +762,7 @@ If using SES, verify the sender domain and move the account out of the SES sandb
 ## 12. Microsoft Entra SSO (optional)
 
 1. In the Entra app registration → **Authentication → Web → Redirect URIs**, add:
-   - `https://<APP_DOMAIN>/api/v1/auth/sso/global/callback`
-   - `https://<APP_DOMAIN>/api/v1/t/<tenant-slug>/auth/sso/callback`, once for each tenant that uses SSO
+   - `https://<APP_DOMAIN>/api/v1/auth/sso/global/callback` (used by every sign-in and tenant; no per-tenant entries needed)
 2. Set `ENTRA_CLIENT_ID` and `ENTRA_CLIENT_SECRET` in `/opt/transpire/deploy/backend.env`.
 3. Apply:
 

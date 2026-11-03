@@ -1,0 +1,37 @@
+/* Shared section primitives for authenticated workspaces. Tokens come from AdminShell (.app). */
+.card { min-width: 0; border: 1px solid var(--line); border-radius: .4rem; background: var(--tp-surface); }
+.card[data-tone="tinted"] { background: var(--panel); }
+.card + .card { margin-top: 1.5rem; }
+.cardHead { display: flex; flex-wrap: wrap; align-items: center; gap: .8rem; border-bottom: 1px solid var(--line); padding: 1rem 1.25rem; }
+.cardIcon { display: grid; width: 2.2rem; height: 2.2rem; flex: 0 0 auto; place-items: center; border-radius: .25rem; background: var(--tp-blue-soft); color: var(--blue-deep); }
+.card[data-tone="tinted"] .cardIcon { background: var(--tp-surface); }
+.cardTitle { min-width: 0; flex: 1 1 14rem; }
+.cardTitle h2 { margin: 0; font-size: var(--tp-text-lg); letter-spacing: -.02em; line-height: 1.3; }
+.cardTitle p { margin: .15rem 0 0; color: var(--muted); font-size: var(--tp-text-sm); line-height: 1.45; }
+.cardMeta { color: var(--muted); font-size: var(--tp-text-sm); font-weight: 700; }
+.cardActions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.cardBody { padding: 1.25rem; }
+.cardBody[data-flush="true"] { padding: 0; }
+
+.summary { display: grid; gap: 1px; margin-bottom: 1.75rem; overflow: hidden; border: 1px solid var(--line); border-radius: .4rem; background: var(--line); grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
+.summaryItem { display: flex; min-height: 5.5rem; align-items: center; gap: .85rem; padding: 1rem 1.25rem; background: var(--tp-surface); color: inherit; text-decoration: none; }
+a.summaryItem:hover, a.summaryItem:focus-visible { background: var(--panel); }
+.summaryIcon { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--tp-blue-soft); color: var(--blue-deep); }
+.summaryItem[data-tone="warning"] .summaryIcon { background: var(--tp-warning-soft); color: var(--tp-warning); }
+.summaryItem[data-tone="success"] .summaryIcon { background: var(--tp-success-soft); color: var(--tp-success); }
+.summaryItem[data-tone="danger"] .summaryIcon { background: var(--tp-danger-soft); color: var(--tp-danger); }
+.summaryItem strong { display: block; font-size: 1.6rem; letter-spacing: -.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.summaryLabel { display: block; margin-top: .15rem; font-size: var(--tp-text-sm); font-weight: 700; }
+.summaryNote { display: block; color: var(--muted); font-size: var(--tp-text-xs); }
+
+.status { display: inline-flex; min-height: 1.85rem; align-items: center; gap: .35rem; border: 1px solid var(--line); border-radius: 999px; padding: .2rem .65rem; background: var(--panel); color: var(--muted); font-size: var(--tp-text-xs); font-weight: 800; white-space: nowrap; }
+.status[data-tone="info"] { border-color: var(--tp-line-strong); background: var(--tp-blue-soft); color: var(--blue-deep); }
+.status[data-tone="success"] { border-color: var(--tp-success-line); background: var(--tp-success-soft); color: var(--tp-success); }
+.status[data-tone="warning"] { border-color: var(--tp-warning-line); background: var(--tp-warning-soft); color: var(--tp-warning); }
+.status[data-tone="danger"] { border-color: var(--tp-danger-line); background: var(--tp-danger-soft); color: var(--tp-danger); }
+
+@media (max-width: 40rem) {
+  .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summaryItem { flex-direction: column; align-items: flex-start; gap: .5rem; padding: .9rem; }
+  .cardHead, .cardBody { padding-inline: 1rem; }
+}

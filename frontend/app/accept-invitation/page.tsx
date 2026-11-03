@@ -18,12 +18,7 @@ export default async function AcceptInvitationPage({
   return (
     <>
       <InvitationAcceptance token={token} />
-      <EnterpriseFooter
-        journeyHref="/#movement"
-        platformHref="/#platform"
-        impactHref="/#impact"
-        topHref="#accept-invitation-top"
-      />
+      <EnterpriseFooter topHref="#accept-invitation-top" />
     </>
   );
 }

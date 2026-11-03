@@ -6,7 +6,7 @@ Docker and manually approved deployment configuration belongs here. The root `do
 
 The `Deploy QA` workflow targets `/home/ubuntu/transpire` on the configured
 instance. GitHub Actions assembles the explicitly mapped repository secrets and defaults
-into one `.env`, then writes it to the encrypted Standard Parameter Store parameter `/transpire/qa/env` in `ap-south-1`.
+into one `.env`, then writes it to the encrypted Standard Parameter Store parameter `/transpire/env` in `ap-south-1`.
 The parameter uses the AWS-managed `alias/aws/ssm` key. SSM starts the command as
 root, downloads that exact parameter version with the EC2 instance role, and
 atomically replaces `/home/ubuntu/transpire/.env` (owner `ubuntu`, mode `0600`).

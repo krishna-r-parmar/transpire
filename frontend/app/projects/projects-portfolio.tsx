@@ -4,9 +4,11 @@ import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
-  CircleDot,
   FolderKanban,
+  IndianRupee,
+  OctagonAlert,
   RefreshCw,
+  SearchCheck,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -16,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { SearchField } from "@/components/ui/search-field";
 import { SelectField } from "@/components/ui/select-field";
+import { SectionCard, SummaryStrip } from "@/components/ui/workspace";
 import { apiRequest } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
 import {
@@ -25,26 +28,8 @@ import {
   uniqueProjectValues,
   type ProjectPortfolioRecord,
 } from "./projects-portfolio-utils";
+import { HealthPill, ProjectStatusPill, healthStates, healthTone, projectStatuses } from "./project-status";
 import styles from "./projects.module.css";
-
-const statusLabels: Record<string, string> = {
-  ready_to_start: "Ready to start",
-  in_progress: "In progress",
-  on_hold: "On hold",
-  completion_review: "Completion review",
-  oe_verified: "OE verified",
-  finance_validation: "Finance validation",
-  success: "Success",
-  cancelled: "Cancelled",
-  unsuccessful: "Closed unsuccessful",
-};
-
-const healthLabels: Record<string, string> = {
-  not_set: "Not assessed",
-  on_track: "On track",
-  at_risk: "At risk",
-  blocked: "Blocked",
-};
 
 export function ProjectsPortfolio() {
   const router = useRouter();
@@ -92,13 +77,14 @@ export function ProjectsPortfolio() {
     [projects],
   );
   const financials = useMemo(() => summarizeFinancials(visible), [visible]);
+  const portfolio = useMemo(() => summarizeFinancials(projects), [projects]);
   const filtersActive = Boolean(query || status || health || site || department);
   const active = projects.filter((project) =>
     ["ready_to_start", "in_progress", "on_hold"].includes(project.status),
   ).length;
-  const atRisk = projects.filter((project) =>
-    ["at_risk", "blocked"].includes(project.health),
-  ).length;
+  const onTrack = projects.filter((project) => project.health === "on_track").length;
+  const atRisk = projects.filter((project) => project.health === "at_risk").length;
+  const blocked = projects.filter((project) => project.health === "blocked").length;
   const inReview = projects.filter((project) =>
     ["completion_review", "oe_verified", "finance_validation"].includes(project.status),
   ).length;
@@ -124,30 +110,40 @@ export function ProjectsPortfolio() {
       title="Projects"
       description="Track implementation, benefits and completion across the organisation."
     >
-      <section className={styles.summary} aria-label="Project portfolio summary">
-        <div><CircleDot /><span><strong>{active}</strong>Active</span></div>
-        <div><AlertTriangle /><span><strong>{atRisk}</strong>At risk</span></div>
-        <div><FolderKanban /><span><strong>{inReview}</strong>Completion review</span></div>
-        <div><CheckCircle2 /><span><strong>{success}</strong>Success</span></div>
-      </section>
+      {!loadingProjects && !error ? (
+        <SummaryStrip
+          label="Project portfolio summary"
+          items={[
+            { icon: <FolderKanban size={18} />, value: active, label: "Active", note: "Ready, in progress or on hold" },
+            { icon: <CheckCircle2 size={18} />, value: onTrack, label: "On track", tone: "success" },
+            { icon: <AlertTriangle size={18} />, value: atRisk, label: "At risk", note: "Need attention", tone: "warning" },
+            { icon: <OctagonAlert size={18} />, value: blocked, label: "Blocked", tone: "danger" },
+            { icon: <SearchCheck size={18} />, value: inReview, label: "Completion review", note: `${success} closed as success` },
+            { icon: <IndianRupee size={18} />, value: formatLakhs(portfolio.achieved), label: "Achieved", note: `of ${formatLakhs(portfolio.target)} target` },
+          ]}
+        />
+      ) : null}
 
-      <section className={styles.discovery} aria-labelledby="project-discovery-heading">
-        <header>
-          <div>
-            <SlidersHorizontal aria-hidden="true" />
-            <span>
-              <h2 id="project-discovery-heading">Find project work</h2>
-              <p>Filter by delivery state or organisation, then compare forecast value.</p>
-            </span>
-          </div>
-          {filtersActive ? (
-            <button type="button" onClick={clearFilters}>
-              <X aria-hidden="true" size={14} />
-              Clear filters
-            </button>
-          ) : null}
-        </header>
+      {error ? (
+        <div className={styles.error} role="alert">
+          <span>{error}</span>
+          <button type="button" onClick={() => void loadProjects()}>
+            <RefreshCw aria-hidden="true" size={14} />Retry
+          </button>
+        </div>
+      ) : null}
 
+      <SectionCard
+        icon={<SlidersHorizontal size={17} />}
+        title="Find project work"
+        description="Filter by delivery state or organisation, then compare forecast value."
+        actions={filtersActive ? (
+          <button className={styles.clear} type="button" onClick={clearFilters}>
+            <X aria-hidden="true" size={14} />
+            Clear filters
+          </button>
+        ) : undefined}
+      >
         <div className={styles.searchRow}>
           <SearchField
             id="project-search"
@@ -168,9 +164,9 @@ export function ProjectsPortfolio() {
             onChange={setStatus}
             options={[
               { value: "", label: "All statuses", description: "No status restriction" },
-              ...Object.entries(statusLabels).map(([value, label]) => ({
+              ...Object.entries(projectStatuses).map(([value, entry]) => ({
                 value,
-                label,
+                label: entry.label,
                 description: "Project lifecycle state",
               })),
             ]}
@@ -183,9 +179,9 @@ export function ProjectsPortfolio() {
             onChange={setHealth}
             options={[
               { value: "", label: "All health states", description: "No health restriction" },
-              ...Object.entries(healthLabels).map(([value, label]) => ({
+              ...Object.entries(healthStates).map(([value, entry]) => ({
                 value,
-                label,
+                label: entry.label,
                 description: "Current delivery assessment",
               })),
             ]}
@@ -217,121 +213,126 @@ export function ProjectsPortfolio() {
             ]}
           />
         </div>
-      </section>
 
-      <section className={styles.benefitSummary} aria-labelledby="portfolio-benefit-heading">
-        <header>
-          <p>Filtered portfolio value</p>
-          <h2 id="portfolio-benefit-heading">Benefits and line of sight</h2>
-        </header>
-        <dl>
-          <div><dt>Target</dt><dd>{formatLakhs(financials.target)}</dd></div>
-          <div><dt>Achieved</dt><dd>{formatLakhs(financials.achieved)}</dd></div>
-          <div><dt>LOS</dt><dd>{formatLakhs(financials.lineOfSight)}</dd></div>
-        </dl>
-      </section>
-
-      {error ? (
-        <div className={styles.error} role="alert">
-          <span>{error}</span>
-          <button type="button" onClick={() => void loadProjects()}>
-            <RefreshCw aria-hidden="true" size={14} />Retry
-          </button>
-        </div>
-      ) : null}
-
-      {loadingProjects ? (
-        <div className={styles.skeleton} aria-label="Loading projects">
-          <span /><span /><span />
-        </div>
-      ) : null}
-
-      {!loadingProjects && visible.length ? (
-        <div className={styles.tableWrap}>
-          <table>
-            <thead>
-              <tr>
-                <th>Project</th>
-                <th>Status and health</th>
-                <th>Milestones</th>
-                <th>Target</th>
-                <th>Achieved</th>
-                <th>LOS</th>
-                <th>Projected</th>
-                <th><span className={styles.srOnly}>Open</span></th>
-              </tr>
-            </thead>
-            <tbody>
-              {visible.map((project) => (
-                <tr key={project.id}>
-                  <td data-label="Project">
-                    <Link href={`/projects/${project.id}`}>{project.title}</Link>
-                    <small>{project.reference} · {project.lead_name || "Lead not recorded"}</small>
-                    <small>
-                      {[project.site, project.department].filter(Boolean).join(" · ")
-                        || "Location not recorded"}
-                    </small>
-                  </td>
-                  <td data-label="Status and health">
-                    <span className={styles.status} data-status={project.status}>
-                      {statusLabels[project.status] ?? project.status}
-                    </span>
-                    <small>{healthLabel(project.health)} · Baseline v{project.baseline_version}</small>
-                    <small>{formatCompletionDate(project.target_completion_date)}</small>
-                  </td>
-                  <td data-label="Milestones">
-                    <strong>{Number(project.progress).toFixed(0)}%</strong>
-                    <small>
-                      {project.milestone_count
-                        ? `${project.milestone_count} milestone${project.milestone_count === 1 ? "" : "s"}`
-                        : "Plan not created"}
-                    </small>
-                  </td>
-                  <MoneyCell label="Target" value={project.target} />
-                  <MoneyCell label="Achieved" value={project.achieved} />
-                  <MoneyCell label="LOS" value={project.line_of_sight} />
-                  <MoneyCell label="Projected" value={project.projected_outcome} />
-                  <td className={styles.open}>
-                    <Link
-                      href={`/projects/${project.id}`}
-                      aria-label={`Open project workspace for ${project.reference}`}
-                    >
-                      <ArrowRight aria-hidden="true" />
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      ) : null}
-
-      {!loadingProjects && !visible.length ? (
-        <section className={styles.empty}>
-          <FolderKanban aria-hidden="true" />
-          <h2>{projects.length ? "No projects match these filters." : "Approved work will appear here."}</h2>
-          <p>
-            {projects.length
-              ? "Clear a filter or try a broader search."
-              : "Submitting an approved project charter publishes its first baseline and creates the execution workspace."}
-          </p>
-          {projects.length ? (
-            <button type="button" onClick={clearFilters}>Clear filters</button>
-          ) : (
-            <Link href="/ideas">Open Idea Bank</Link>
-          )}
+        <section className={styles.benefitSummary} aria-labelledby="portfolio-benefit-heading">
+          <header>
+            <p>Filtered portfolio value</p>
+            <h3 id="portfolio-benefit-heading">Benefits and line of sight</h3>
+          </header>
+          <dl>
+            <div><dt>Target</dt><dd>{formatLakhs(financials.target)}</dd></div>
+            <div><dt>Achieved</dt><dd>{formatLakhs(financials.achieved)}</dd></div>
+            <div><dt>LOS</dt><dd>{formatLakhs(financials.lineOfSight)}</dd></div>
+          </dl>
         </section>
-      ) : null}
+      </SectionCard>
+
+      <SectionCard
+        className={styles.results}
+        icon={<FolderKanban size={17} />}
+        title="Project portfolio"
+        description="Open a project for its milestones, benefits, charter and team."
+        meta={loadingProjects ? undefined : `${visible.length} shown`}
+        flush
+      >
+        {loadingProjects ? (
+          <div className={styles.skeleton} aria-label="Loading projects">
+            <span /><span /><span />
+          </div>
+        ) : null}
+
+        {!loadingProjects && visible.length ? (
+          <div className={styles.tableWrap}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Project</th>
+                  <th>Status and health</th>
+                  <th>Milestones</th>
+                  <th className={styles.numeric}>Target</th>
+                  <th className={styles.numeric}>Achieved</th>
+                  <th className={styles.numeric}>LOS</th>
+                  <th className={styles.numeric}>Projected</th>
+                  <th><span className={styles.srOnly}>Open</span></th>
+                </tr>
+              </thead>
+              <tbody>
+                {visible.map((project) => {
+                  const progress = Math.min(100, Math.max(0, Number(project.progress) || 0));
+                  return (
+                    <tr key={project.id}>
+                      <td data-label="Project">
+                        <span className={styles.reference}>{project.reference}</span>
+                        <Link className={styles.projectLink} href={`/projects/${project.id}`}>{project.title}</Link>
+                        <small>{project.lead_name || "Lead not recorded"}</small>
+                        <small>
+                          {[project.site, project.department].filter(Boolean).join(" · ")
+                            || "Location not recorded"}
+                        </small>
+                      </td>
+                      <td data-label="Status and health">
+                        <div className={styles.pills}>
+                          <ProjectStatusPill status={project.status} />
+                          <HealthPill health={project.health} />
+                        </div>
+                        <small>Baseline v{project.baseline_version} · {formatCompletionDate(project.target_completion_date)}</small>
+                      </td>
+                      <td data-label="Milestones">
+                        <div className={styles.barRow}>
+                          <span className={styles.bar} data-tone={healthTone(project.health)} aria-hidden="true">
+                            <span style={{ width: `${progress}%` }} />
+                          </span>
+                          <strong>{Number(project.progress).toFixed(0)}%</strong>
+                        </div>
+                        <small>
+                          {project.milestone_count
+                            ? `${project.milestone_count} milestone${project.milestone_count === 1 ? "" : "s"}`
+                            : "Plan not created"}
+                        </small>
+                      </td>
+                      <MoneyCell label="Target" value={project.target} />
+                      <MoneyCell label="Achieved" value={project.achieved} />
+                      <MoneyCell label="LOS" value={project.line_of_sight} />
+                      <MoneyCell label="Projected" value={project.projected_outcome} />
+                      <td className={styles.open}>
+                        <Link
+                          href={`/projects/${project.id}`}
+                          aria-label={`Open project workspace for ${project.reference}`}
+                        >
+                          <ArrowRight aria-hidden="true" size={16} />
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : null}
+
+        {!loadingProjects && !visible.length ? (
+          <div className={styles.empty}>
+            <FolderKanban aria-hidden="true" size={26} />
+            <h3>{projects.length ? "No projects match these filters." : "Approved work will appear here."}</h3>
+            <p>
+              {projects.length
+                ? "Clear a filter or try a broader search."
+                : "Submitting an approved project charter publishes its first baseline and creates the execution workspace."}
+            </p>
+            {projects.length ? (
+              <button type="button" onClick={clearFilters}>Clear filters</button>
+            ) : (
+              <Link href="/ideas">Open Idea Bank</Link>
+            )}
+          </div>
+        ) : null}
+      </SectionCard>
     </AdminShell>
   );
 }
 
 function MoneyCell({ label, value }: { label: string; value: string }) {
-  return <td data-label={label}><strong className={styles.money}>{formatLakhs(value)}</strong></td>;
-}
-
-function healthLabel(value: string) {
-  return value === "not_set" ? "Health not assessed" : healthLabels[value] ?? value;
+  return <td className={styles.numeric} data-label={label}><strong className={styles.money}>{formatLakhs(value)}</strong></td>;
 }
 
 function formatCompletionDate(value: string | null) {

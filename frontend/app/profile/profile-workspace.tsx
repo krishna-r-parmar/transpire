@@ -1,6 +1,6 @@
 "use client";
 
-import { BellRing, Camera, Check, FileClock, LogOut, Save, Trash2 } from "lucide-react";
+import { BellRing, Camera, Check, FileClock, LogOut, Save, Trash2, TrendingUp, UserRound } from "lucide-react";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
@@ -8,6 +8,7 @@ import { AuditLog } from "@/app/audit/audit-workspace";
 import { ProfileAvatar } from "@/components/app/profile-avatar";
 import { DismissibleNotice } from "@/components/ui/dismissible-notice";
 import { SelectField } from "@/components/ui/select-field";
+import { SectionCard } from "@/components/ui/workspace";
 import { apiRequest } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
 import styles from "./profile.module.css";
@@ -98,30 +99,36 @@ export function ProfileWorkspace() {
   return <AdminShell session={session} active="profile" eyebrow="Personal workspace" title="Your TRANSPIRE profile" description="Keep your identity current, choose how TRANSPIRE communicates with you, and see the improvement habit you are building.">
     {notice ? <DismissibleNotice tone={notice.tone} onDismiss={() => setNotice(null)}>{notice.text}</DismissibleNotice> : null}
     <form className={styles.layout} onSubmit={(event) => void save(event)}>
-      <section className={styles.editor}>
-        <header className={styles.profileHeader}><ProfileAvatar name={name || profile.display_name} size="large" hasPhoto={profile.has_photo} /><div><p>Profile details</p><h2>How you appear in TRANSPIRE</h2><span>Your photo and name help colleagues recognise you across ideas and approvals.</span><div className={styles.photoActions}><label><Camera size={15} />{profile.has_photo ? "Replace photo" : "Add photo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void uploadPhoto(event.target.files?.[0]); event.target.value = ""; }} /></label>{profile.has_photo ? <button type="button" onClick={() => void removePhoto()} disabled={Boolean(busy)}><Trash2 size={15} />Remove</button> : null}</div><small>JPEG, PNG, or WebP. Maximum 2 MB.</small></div></header>
-        <label><span>Display name</span><input value={name} minLength={2} maxLength={200} required onChange={(event) => setName(event.target.value)} /></label>
-        <div className={styles.readOnly}><span>Email address</span><strong>{profile.email}</strong><small>Managed by your authenticated account.</small></div>
-        <div className={styles.identityFacts}><div><span>Organisation</span><strong>{profile.tenant_name}</strong></div><div><span>Access</span><strong>{profile.roles.length ? profile.roles.map(labelRole).join(", ") : "Contributor"}</strong></div></div>
-      </section>
-      <div className={styles.side}>
-        <section className={styles.contribution}>
-          <header><div><p>Contribution activity</p><h2>Your improvement rhythm</h2><span>Ideas submitted during the last 365 days.</span></div><div className={styles.totals}><strong>{profile.submitted_ideas}</strong><span>submitted</span><small>{profile.total_ideas} including drafts</small></div></header>
-          <div className={styles.graphFrame}><div className={styles.graph} aria-label="Idea contributions over the last year">{weeks.map((day, index) => day ? <span key={day.date} data-level={Math.min(day.count, 4)} title={`${day.date}: ${day.count} ${day.count === 1 ? "idea" : "ideas"}`} aria-label={`${day.date}: ${day.count} ${day.count === 1 ? "idea" : "ideas"}`} /> : <i key={`blank-${index}`} />)}</div></div>
-          <div className={styles.legend}><span>Less</span>{[0, 1, 2, 3, 4].map((level) => <i key={level} data-level={level} />)}<span>More</span></div>
-          <p className={styles.graphNote}><Check size={15} />Drafts are counted in your total, while the graph records completed submissions.</p>
-        </section>
-        <section className={styles.preferences}><div><BellRing size={18} /><div><p>Preferences</p><h3>Notifications and workspace</h3></div></div>
-          <Preference label="Idea lifecycle emails" description="Receive status and charter updates for ideas you own." value={settings.email_idea_updates} onChange={(value) => setSettings({ ...settings, email_idea_updates: value })} />
-          <Preference label="Approval assignment emails" description="Be notified when an approval stage becomes yours." value={settings.email_approval_updates} onChange={(value) => setSettings({ ...settings, email_approval_updates: value })} />
-          <Preference label="Compact list density" description="Show more list rows when this preference is supported." value={settings.compact_lists} onChange={(value) => setSettings({ ...settings, compact_lists: value })} />
-          <SelectField id="profile-timezone" name="timezone" label="Timezone" value={settings.timezone} options={timezones} onChange={(value) => setSettings({ ...settings, timezone: value })} />
+      <div className={styles.stack}>
+        <SectionCard icon={<UserRound size={17} />} title="How you appear in TRANSPIRE" description="Your photo and name help colleagues recognise you across ideas and approvals.">
+          <div className={styles.identity}>
+            <div className={styles.profileHeader}><ProfileAvatar name={name || profile.display_name} size="large" hasPhoto={profile.has_photo} /><div><strong>{name || profile.display_name}</strong><div className={styles.photoActions}><label><Camera size={16} />{profile.has_photo ? "Replace photo" : "Add photo"}<input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { void uploadPhoto(event.target.files?.[0]); event.target.value = ""; }} /></label>{profile.has_photo ? <button type="button" onClick={() => void removePhoto()} disabled={Boolean(busy)}><Trash2 size={16} />Remove</button> : null}</div><small>JPEG, PNG, or WebP. Maximum 2 MB.</small></div></div>
+            <div className={styles.fields}>
+              <label className={styles.field}><span>Display name</span><input value={name} minLength={2} maxLength={200} required onChange={(event) => setName(event.target.value)} /></label>
+              <div className={styles.readOnly}><span>Email address</span><strong>{profile.email}</strong><small>Managed by your authenticated account.</small></div>
+            </div>
+            <dl className={styles.facts}><div><dt>Organisation</dt><dd>{profile.tenant_name}</dd></div><div><dt>Access</dt><dd>{profile.roles.length ? profile.roles.map(labelRole).join(", ") : "Contributor"}</dd></div></dl>
+          </div>
+        </SectionCard>
+        <SectionCard icon={<BellRing size={17} />} title="Notifications and workspace" description="Choose how TRANSPIRE communicates with you and how lists appear.">
+          <div className={styles.preferences}>
+            <Preference label="Idea lifecycle emails" description="Receive status and charter updates for ideas you own." value={settings.email_idea_updates} onChange={(value) => setSettings({ ...settings, email_idea_updates: value })} />
+            <Preference label="Approval assignment emails" description="Be notified when an approval stage becomes yours." value={settings.email_approval_updates} onChange={(value) => setSettings({ ...settings, email_approval_updates: value })} />
+            <Preference label="Compact list density" description="Show more list rows when this preference is supported." value={settings.compact_lists} onChange={(value) => setSettings({ ...settings, compact_lists: value })} />
+            <div className={styles.timezone}><SelectField id="profile-timezone" name="timezone" label="Timezone" value={settings.timezone} options={timezones} onChange={(value) => setSettings({ ...settings, timezone: value })} /></div>
+          </div>
           <div className={styles.actions}><button className={styles.secondary} type="button" onClick={() => void signOut()} disabled={Boolean(busy)}><LogOut size={16} />{busy === "signout" ? "Signing out" : "Sign out"}</button><button className={styles.primary} type="submit" disabled={Boolean(busy) || name.trim().length < 2}><Save size={16} />{busy === "save" ? "Saving" : "Save profile"}</button></div>
-        </section>
+        </SectionCard>
       </div>
+      <SectionCard className={styles.rhythm} icon={<TrendingUp size={17} />} title="Your improvement rhythm" description="Ideas submitted during the last 365 days." tinted>
+        <dl className={styles.totals}><div><dt>Submitted</dt><dd>{profile.submitted_ideas}</dd></div><div><dt>Including drafts</dt><dd>{profile.total_ideas}</dd></div></dl>
+        <div className={styles.graphFrame}><div className={styles.graph} aria-label="Idea contributions over the last year">{weeks.map((day, index) => day ? <span key={day.date} data-level={Math.min(day.count, 4)} title={`${day.date}: ${day.count} ${day.count === 1 ? "idea" : "ideas"}`} aria-label={`${day.date}: ${day.count} ${day.count === 1 ? "idea" : "ideas"}`} /> : <i key={`blank-${index}`} />)}</div></div>
+        <div className={styles.legend}><span>Less</span>{[0, 1, 2, 3, 4].map((level) => <i key={level} data-level={level} />)}<span>More</span></div>
+        <p className={styles.graphNote}><Check size={16} />Drafts are counted in your total, while the graph records completed submissions.</p>
+      </SectionCard>
     </form>
     <section className={styles.auditSection} id="audit-log" aria-labelledby="profile-audit-title">
-      <header><FileClock size={19} /><div><p>Accountability</p><h2 id="profile-audit-title">Audit log</h2><span>{session.roles.includes("tenant_admin") ? "Review governed activity across this organisation." : "Review events you performed or that affected your submissions."}</span></div></header>
+      <header><span aria-hidden="true"><FileClock size={18} /></span><div><p>Accountability</p><h2 id="profile-audit-title">Audit log</h2><span>{session.roles.includes("tenant_admin") ? "Review governed activity across this organisation." : "Review events you performed or that affected your submissions."}</span></div></header>
       <AuditLog session={session} embedded />
     </section>
   </AdminShell>;
