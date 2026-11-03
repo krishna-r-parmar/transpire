@@ -100,6 +100,17 @@ def _global_callback(settings: Settings) -> str:
     return f"{settings.public_api_url.rstrip('/')}/auth/sso/global/callback"
 
 
+def _tenant_callback(settings: Settings) -> str:
+    # Tenant sign-ins share the global redirect URI, so Entra needs exactly one.
+    # The tenant travels in the state token, which is how the callback tells them apart.
+    return _global_callback(settings)
+
+
+def tenant_slug_from_state(raw_state: str) -> str | None:
+    slug, separator, token = raw_state.partition(".")
+    return slug if separator and slug and token else None
+
+
 async def begin_global_sso(settings: Settings, session: AsyncSession, *, remember_me: bool) -> str:
     if not _credentials_ready(settings):
         raise SSOConfigurationError("Microsoft SSO is not available on this platform.")
@@ -269,7 +280,7 @@ async def begin_sso(
             raise SSOConfigurationError("Microsoft SSO is not active for this organisation.")
         if purpose == "validate" and initiated_by_user_id is None:
             raise SSOConfigurationError("An administrator session is required to validate SSO.")
-        state = generate_session_token()
+        state = f"{tenant.slug}.{generate_session_token()}"
         nonce = generate_session_token()
         verifier = _base64url(secrets.token_bytes(64))
         session.add(
@@ -285,7 +296,7 @@ async def begin_sso(
             )
         )
         directory_id = config.entra_directory_id
-    callback = f"{settings.public_api_url.rstrip('/')}/t/{tenant.slug}/auth/sso/callback"
+    callback = _tenant_callback(settings)
     query = urlencode(
         {
             "client_id": settings.entra_client_id,
@@ -310,7 +321,7 @@ async def _exchange_and_validate(
     directory_id: str,
     settings: Settings,
 ) -> dict[str, object]:
-    callback = f"{settings.public_api_url.rstrip('/')}/t/{tenant.slug}/auth/sso/callback"
+    callback = _tenant_callback(settings)
     token_url = f"https://login.microsoftonline.com/{directory_id}/oauth2/v2.0/token"
     async with httpx.AsyncClient(timeout=15.0) as client:
         token_response = await client.post(
