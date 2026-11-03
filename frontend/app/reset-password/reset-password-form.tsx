@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight, CheckCircle2, Eye, EyeOff, Link2Off } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Link2Off, ShieldCheck } from "lucide-react";
 import { TenantLink as Link } from "@/components/app/tenant-link";
 import { FormEvent, useState } from "react";
 import { RecoveryShell } from "@/components/auth/recovery-shell";
@@ -19,6 +19,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
   const [loading, setLoading] = useState(false);
   const [complete, setComplete] = useState(false);
   const [linkError, setLinkError] = useState(!token);
+  const [ssoRequired, setSsoRequired] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -36,7 +37,8 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       });
       if (!response.ok) {
         setLinkError(response.status === 400);
-        if (response.status !== 400) {
+        setSsoRequired(response.status === 409);
+        if (response.status !== 400 && response.status !== 409) {
           setErrors({ password: "Password reset is temporarily unavailable. Try again." });
         }
         return;
@@ -54,8 +56,8 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     <RecoveryShell
       pageId="reset-password-top"
       eyebrow="Secure password reset"
-      title={complete ? "Access restored." : "Choose a new password."}
-      description={complete ? "Your previous sessions have been closed to protect your account." : "Create a strong password you do not use for another service."}
+      title={complete ? "Access restored." : ssoRequired ? "Use Microsoft sign-in." : "Choose a new password."}
+      description={complete ? "Your previous sessions have been closed to protect your account." : ssoRequired ? "Your organisation manages sign-in through Microsoft." : "Create a strong password you do not use for another service."}
     >
       {complete ? (
         <div className={styles.status} role="status">
@@ -63,6 +65,15 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
           <div>
             <h2>Your password has been changed</h2>
             <p>Sign in again on each device using your new password.</p>
+          </div>
+          <Link href="/sign-in">Continue to sign in</Link>
+        </div>
+      ) : ssoRequired ? (
+        <div className={styles.status} role="status">
+          <span className={styles.statusIcon}><ShieldCheck aria-hidden="true" size={19} /></span>
+          <div>
+            <h2>Sign in with Microsoft instead</h2>
+            <p>Your organisation uses Microsoft SSO, so TRANSPIRE passwords cannot be reset here. Use your work account to sign in.</p>
           </div>
           <Link href="/sign-in">Continue to sign in</Link>
         </div>

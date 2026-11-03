@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, MailPlus, RefreshCw, UserCheck, UserX, Users } from "lucide-react";
+import { Ban, CheckCircle2, CircleDot, Clock, Lock, Mail, MailPlus, RefreshCw, UserCheck, UserX, Users, type LucideIcon } from "lucide-react";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DismissibleNotice } from "@/components/ui/dismissible-notice";
 import { SearchField } from "@/components/ui/search-field";
 import { SelectField } from "@/components/ui/select-field";
+import { SectionCard, StatusPill, SummaryStrip } from "@/components/ui/workspace";
 import { apiRequest } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
 import styles from "../admin.module.css";
@@ -30,6 +31,28 @@ type Invitation = {
   expires_at: string;
   last_sent_at: string;
 };
+
+type Tone = "neutral" | "info" | "success" | "warning" | "danger";
+
+const accountStates: Record<string, { label: string; invitationLabel?: string; tone: Tone; Icon: LucideIcon }> = {
+  active: { label: "Active", tone: "success", Icon: CheckCircle2 },
+  invited: { label: "Invited", tone: "info", Icon: Mail },
+  pending: { label: "Pending", invitationLabel: "Invitation pending", tone: "info", Icon: Mail },
+  expired: { label: "Expired", invitationLabel: "Invitation expired", tone: "warning", Icon: Clock },
+  revoked: { label: "Revoked", invitationLabel: "Invitation revoked", tone: "danger", Icon: Ban },
+  inactive: { label: "Inactive", tone: "neutral", Icon: UserX },
+  locked: { label: "Locked", tone: "danger", Icon: Lock },
+};
+
+function AccountStatus({ state, invitation = false }: { state: string; invitation?: boolean }) {
+  const entry = accountStates[state] ?? { label: state.replaceAll("_", " "), tone: "neutral" as const, Icon: CircleDot };
+  return <StatusPill tone={entry.tone} icon={<entry.Icon aria-hidden="true" size={14} />}>{invitation ? entry.invitationLabel ?? entry.label : entry.label}</StatusPill>;
+}
+
+function initials(name: string, fallback: string) {
+  const letters = name.split(/\s+/).filter(Boolean).map((word) => word[0]).join("").slice(0, 2);
+  return (letters || fallback.slice(0, 1)).toLocaleUpperCase();
+}
 
 type Confirmation = {
   title: string;
@@ -165,6 +188,10 @@ export function PeopleConsole() {
 
   if (loading || !session) return <main className={styles.loading}>Loading administration</main>;
 
+  const activeCount = members.filter((member) => member.status === "active").length;
+  const pendingInvitations = invitations.filter((invitation) => invitation.status === "pending").length;
+  const inactiveCount = members.filter((member) => member.status === "inactive" || member.status === "locked").length;
+
   return (
     <AdminShell
       session={session}
@@ -173,38 +200,41 @@ export function PeopleConsole() {
       title="Build the community behind improvement."
       description="Invite colleagues, assign the right starting access, and keep your organisational directory visible."
     >
-      <div className={styles.workspace}>
-        <section className={styles.section} aria-labelledby="invite-person-title">
-          <div className={styles.sectionHeader}>
-            <div><h2 id="invite-person-title">Invite a person</h2><p>They will join {session.tenant.name}. Choose Employee / Idea Submitter for standard access.</p></div>
-            <MailPlus aria-hidden="true" size={20} />
-          </div>
-          <form className={`${styles.form} ${styles.inviteForm}`} onSubmit={invite}>
+      <SummaryStrip label="People summary" items={[
+        { icon: <Users size={18} />, value: members.length, label: "People", note: `In ${session.tenant.name}` },
+        { icon: <UserCheck size={18} />, value: activeCount, label: "Active", tone: "success" },
+        { icon: <MailPlus size={18} />, value: pendingInvitations, label: "Invitations pending", tone: pendingInvitations ? "warning" : undefined },
+        { icon: <UserX size={18} />, value: inactiveCount, label: "Inactive or locked", tone: inactiveCount ? "danger" : undefined },
+      ]} />
+      {message || error ? <div className={styles.notices}>
+        {message ? <DismissibleNotice onDismiss={() => setMessage("")}>{message}</DismissibleNotice> : null}
+        {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
+      </div> : null}
+      <div className={styles.grid}>
+        <SectionCard icon={<Users size={17} />} title="Organisation directory" description={`${members.length} active or invited member${members.length === 1 ? "" : "s"}`} flush>
+          <div className={styles.cardTools}><SearchField id="people-search" label="Search organisation directory" value={searchQuery} onChange={setSearchQuery} placeholder="Search name, email, status, or role" resultCount={visibleMembers.length} /></div>
+          {members.length ? (
+            <div className={styles.tableWrap}>
+              <table className={styles.table}>
+                <thead><tr><th>Person</th><th>Access</th><th>Status</th><th>Actions</th></tr></thead>
+                <tbody>{visibleMembers.map((member) => {
+                  const invitation = invitations.find((item) => item.email === member.email);
+                  return <tr key={member.id}><td><div className={styles.person}><span className={styles.avatar} aria-hidden="true">{initials(member.display_name, member.email)}</span><span><strong>{member.display_name}</strong><small>{member.email}</small></span></div></td><td className={styles.access}>{member.roles.map((role) => role.replaceAll("_", " ")).join(", ") || "No role assigned"}</td><td><AccountStatus state={invitation?.status ?? member.status} invitation={Boolean(invitation)} /></td><td><div className={styles.rowActions}>{invitation ? <><button type="button" onClick={() => void invitationAction(invitation, "resend")} disabled={Boolean(busyAction)}><RefreshCw aria-hidden="true" size={15} /> Resend</button>{invitation.status !== "revoked" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: "Revoke this invitation?", description: `The invitation for ${invitation.email} will stop working immediately. You can send a new invitation later.`, confirmLabel: "Revoke invitation", busyLabel: "Revoking", run: () => invitationAction(invitation, "revoke") })} disabled={Boolean(busyAction)}><Ban aria-hidden="true" size={15} /> Revoke</button> : null}</> : member.status === "active" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: `Deactivate ${member.display_name}?`, description: "Their active sessions will end immediately and they will be unable to sign in until reactivated.", confirmLabel: "Deactivate member", busyLabel: "Deactivating", run: () => memberAction(member, "inactive") })} disabled={Boolean(busyAction)}><UserX aria-hidden="true" size={15} /> Deactivate</button> : <button type="button" onClick={() => void memberAction(member, "active")} disabled={Boolean(busyAction)}><UserCheck aria-hidden="true" size={15} /> Reactivate</button>}</div></td></tr>;
+                })}</tbody>
+              </table>
+              {visibleMembers.length === 0 ? <p className={styles.noResults}>No people match “{searchQuery}”. Try a name, email, role, or status.</p> : null}
+            </div>
+          ) : <div className={styles.empty}><Users aria-hidden="true" size={24} /><p>No members are visible in this workspace yet.</p></div>}
+        </SectionCard>
+
+        <SectionCard icon={<MailPlus size={17} />} title="Invite a person" description={`They will join ${session.tenant.name}. Choose Employee / Idea Submitter for standard access.`} tinted>
+          <form className={styles.form} onSubmit={invite}>
             <div className={styles.field}><label htmlFor="invite-name">Full name</label><input id="invite-name" name="display_name" required minLength={2} autoComplete="name" /></div>
             <div className={styles.field}><label htmlFor="invite-email">Work email</label><input id="invite-email" name="email" type="email" required autoComplete="email" /></div>
             <SelectField id="invite-role" name="role_key" label="Access role" value={roleKey} onChange={setRoleKey} disabled={submitting || roles.length === 0} options={roles.map((role) => ({ value: role.key, label: role.key === "idea_submitter" ? "Employee / Idea Submitter" : role.name, description: role.key === "tenant_admin" ? "Manage people and workspace settings" : "Standard access to submit and follow ideas" }))} />
             <button className={styles.primary} type="submit" disabled={submitting || roles.length === 0}><MailPlus aria-hidden="true" size={16} /> {submitting ? "Sending" : "Send invitation"}</button>
           </form>
-          {message ? <DismissibleNotice onDismiss={() => setMessage("")}>{message}</DismissibleNotice> : null}
-          {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
-        </section>
-
-        <section className={styles.section} aria-labelledby="directory-title">
-          <div className={styles.sectionHeader}><div><h2 id="directory-title">Organisation directory</h2><p>{members.length} active or invited member{members.length === 1 ? "" : "s"}</p></div><Users aria-hidden="true" size={20} /></div>
-          <div className={styles.listTools}><SearchField id="people-search" label="Search organisation directory" value={searchQuery} onChange={setSearchQuery} placeholder="Search name, email, status, or role" resultCount={visibleMembers.length} /></div>
-          {members.length ? (
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead><tr><th>Person</th><th>Status</th><th>Access</th><th>Actions</th></tr></thead>
-                <tbody>{visibleMembers.map((member) => {
-                  const invitation = invitations.find((item) => item.email === member.email);
-                  return <tr key={member.id}><td><strong>{member.display_name}</strong><small>{member.email}</small></td><td><span className={styles.status} data-state={invitation?.status ?? member.status}>{invitation?.status ?? member.status}</span></td><td>{member.roles.map((role) => role.replaceAll("_", " ")).join(", ") || "No role assigned"}</td><td><div className={styles.rowActions}>{invitation ? <><button type="button" onClick={() => void invitationAction(invitation, "resend")} disabled={Boolean(busyAction)}><RefreshCw aria-hidden="true" size={14} /> Resend</button>{invitation.status !== "revoked" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: "Revoke this invitation?", description: `The invitation for ${invitation.email} will stop working immediately. You can send a new invitation later.`, confirmLabel: "Revoke invitation", busyLabel: "Revoking", run: () => invitationAction(invitation, "revoke") })} disabled={Boolean(busyAction)}><Ban aria-hidden="true" size={14} /> Revoke</button> : null}</> : member.status === "active" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: `Deactivate ${member.display_name}?`, description: "Their active sessions will end immediately and they will be unable to sign in until reactivated.", confirmLabel: "Deactivate member", busyLabel: "Deactivating", run: () => memberAction(member, "inactive") })} disabled={Boolean(busyAction)}><UserX aria-hidden="true" size={14} /> Deactivate</button> : <button type="button" onClick={() => void memberAction(member, "active")} disabled={Boolean(busyAction)}><UserCheck aria-hidden="true" size={14} /> Reactivate</button>}</div></td></tr>;
-                })}</tbody>
-              </table>
-              {visibleMembers.length === 0 ? <p className={styles.noResults}>No people match “{searchQuery}”. Try a name, email, role, or status.</p> : null}
-            </div>
-          ) : <p className={styles.empty}>No members are visible in this workspace yet.</p>}
-        </section>
+        </SectionCard>
       </div>
       <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title ?? "Confirm action"} description={confirmation?.description ?? ""} confirmLabel={confirmation?.confirmLabel ?? "Confirm"} busyLabel={confirmation?.busyLabel} busy={confirming} onClose={() => setConfirmation(null)} onConfirm={confirmAction} />
     </AdminShell>

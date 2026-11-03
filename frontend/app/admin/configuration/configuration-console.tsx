@@ -1,6 +1,6 @@
 "use client";
 
-import { Building2, Eye, GitBranch, Layers3, Pencil, Plus, Power, Rocket, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { Archive, Building2, Check, CheckCircle2, CircleSlash, Clock, Eye, FilePenLine, GitBranch, KeyRound, Layers3, Link2, ListTree, MapPin, Pencil, Plus, Power, Rocket, Save, ShieldCheck, Trash2, TriangleAlert, Users, Workflow as WorkflowIcon, type LucideIcon } from "lucide-react";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
@@ -9,6 +9,7 @@ import { DismissibleNotice } from "@/components/ui/dismissible-notice";
 import { SearchField } from "@/components/ui/search-field";
 import { SearchableSelectField } from "@/components/ui/searchable-select-field";
 import { SelectField } from "@/components/ui/select-field";
+import { SectionCard, StatusPill } from "@/components/ui/workspace";
 import { apiRequest, apiUrl } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
 import shared from "../admin.module.css";
@@ -33,6 +34,16 @@ const labels: Record<Kind, { singular: string; plural: string; parent?: Kind }> 
   subcategory: { singular: "Subcategory", plural: "Subcategories", parent: "category" },
   process_area: { singular: "Process area", plural: "Process areas" },
 };
+
+const sections: Array<{ key: Tab; label: string; Icon: LucideIcon }> = [
+  { key: "organisation", label: "Organisation", Icon: Building2 },
+  { key: "classification", label: "Classification", Icon: Layers3 },
+  { key: "workflow", label: "Approval workflow", Icon: GitBranch },
+  { key: "idea_bank", label: "Idea Bank visibility", Icon: Eye },
+  { key: "authentication", label: "Authentication", Icon: ShieldCheck },
+];
+
+const registerIcons: Record<Kind, LucideIcon> = { site: MapPin, department: Users, category: Layers3, subcategory: ListTree, process_area: WorkflowIcon };
 
 const emptyStage = (): Stage => ({ key: "", name: "", approver_role: "assigned_member", assignee_membership_id: "", assignee_name: null, assignee_email: null, assignee_status: null, sla_hours: 48, required: true });
 const slugify = (value: string) => value.toLocaleLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
@@ -197,20 +208,20 @@ export function ConfigurationConsole({ returnedFromSSOValidation = false }: { re
   const groups: Kind[][] = tab === "organisation" ? [["site", "department"]] : [["category", "subcategory", "process_area"]];
   return (
     <AdminShell session={session} active="configuration" eyebrow="Tenant Administration" title="Shape how ideas move through the organisation." description="Maintain shared reference data and publish controlled approval contracts without changing ideas already in flight.">
-      <nav className={styles.tabs} aria-label="Configuration areas">
-        <button type="button" data-active={tab === "organisation"} onClick={() => setTab("organisation")}><Building2 size={17} />Organisation</button>
-        <button type="button" data-active={tab === "classification"} onClick={() => setTab("classification")}><Layers3 size={17} />Classification</button>
-        <button type="button" data-active={tab === "workflow"} onClick={() => setTab("workflow")}><GitBranch size={17} />Approval workflow</button>
-        <button type="button" data-active={tab === "idea_bank"} onClick={() => setTab("idea_bank")}><Eye size={17} />Idea Bank visibility</button>
-        <button type="button" data-active={tab === "authentication"} onClick={() => setTab("authentication")}><ShieldCheck size={17} />Authentication</button>
-      </nav>
-      {message ? <DismissibleNotice onDismiss={() => setMessage("")}>{message}</DismissibleNotice> : null}
-      {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
-      {loadError ? <div className={styles.loadError} role="alert"><p>{loadError}</p><div><button type="button" onClick={() => void loadConfiguration()} disabled={loadingData}>{loadingData ? "Retrying" : "Retry"}</button><button type="button" onClick={() => setLoadError("")} aria-label="Dismiss configuration error">×</button></div></div> : null}
-      {tab === "organisation" || tab === "classification" ? <div className={styles.registerGrid}>{groups[0].map((kind) => <MasterDataRegister key={kind} kind={kind} items={items[kind]} allItems={items} query={search[kind]} onQuery={(value) => setSearch((current) => ({ ...current, [kind]: value }))} busy={busy} onCreate={createItem} onToggle={(item) => item.is_active ? setConfirmation({ title: `Deactivate ${item.name}?`, description: "It will remain on historical records but will no longer be available for new ideas.", confirmLabel: "Deactivate", run: () => toggleItem(item) }) : void toggleItem(item)} />)}</div> : null}
-      {tab === "workflow" ? <WorkflowRegister workflows={workflows} assignees={workflowAssignees} stages={stages} setStages={setStages} sourceVersion={sourceVersion} busy={busy} onCreate={createVersion} onEdit={editPublishedVersion} onPublish={(workflow, version) => setConfirmation({ title: `Publish version ${version.version}?`, description: "This version becomes the default contract for new ideas. The current published version will be retained as retired history.", confirmLabel: "Publish version", run: () => publishVersion(workflow, version) })} /> : null}
-      {tab === "idea_bank" ? <IdeaBankPolicyEditor policy={ideaBankPolicy} onChange={setIdeaBankPolicy} onSave={() => void saveIdeaBankPolicy()} busy={busy === "policy"} /> : null}
-      {tab === "authentication" ? <SSOEditor key={sso?.entra_directory_id ?? "new"} configuration={sso} busy={busy} onSave={saveSSO} onValidate={validateSSO} onActivate={() => setConfirmation({ title: "Move this organisation to Microsoft SSO?", description: `Password sign-in will stop for new sessions. ${sso?.active_user_count ?? 0} active users will be notified, while existing sessions and all TRANSPIRE data remain unchanged.`, confirmLabel: "Move to Microsoft SSO", run: activateSSO })} /> : null}
+      <div className={styles.layout}>
+        <nav className={styles.sideNav} aria-label="Configuration areas"><div>
+          {sections.map(({ key, label, Icon }) => <button key={key} type="button" data-active={tab === key} aria-current={tab === key ? "true" : undefined} onClick={() => setTab(key)}><Icon aria-hidden="true" size={18} />{label}</button>)}
+        </div></nav>
+        <div className={styles.content}>
+          {message ? <DismissibleNotice onDismiss={() => setMessage("")}>{message}</DismissibleNotice> : null}
+          {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
+          {loadError ? <div className={styles.loadError} role="alert"><p>{loadError}</p><div><button type="button" onClick={() => void loadConfiguration()} disabled={loadingData}>{loadingData ? "Retrying" : "Retry"}</button><button type="button" onClick={() => setLoadError("")} aria-label="Dismiss configuration error">×</button></div></div> : null}
+          {tab === "organisation" || tab === "classification" ? <div className={styles.registerGrid}>{groups[0].map((kind) => <MasterDataRegister key={kind} kind={kind} items={items[kind]} allItems={items} query={search[kind]} onQuery={(value) => setSearch((current) => ({ ...current, [kind]: value }))} busy={busy} onCreate={createItem} onToggle={(item) => item.is_active ? setConfirmation({ title: `Deactivate ${item.name}?`, description: "It will remain on historical records but will no longer be available for new ideas.", confirmLabel: "Deactivate", run: () => toggleItem(item) }) : void toggleItem(item)} />)}</div> : null}
+          {tab === "workflow" ? <WorkflowRegister workflows={workflows} assignees={workflowAssignees} stages={stages} setStages={setStages} sourceVersion={sourceVersion} busy={busy} onCreate={createVersion} onEdit={editPublishedVersion} onPublish={(workflow, version) => setConfirmation({ title: `Publish version ${version.version}?`, description: "This version becomes the default contract for new ideas. The current published version will be retained as retired history.", confirmLabel: "Publish version", run: () => publishVersion(workflow, version) })} /> : null}
+          {tab === "idea_bank" ? <IdeaBankPolicyEditor policy={ideaBankPolicy} onChange={setIdeaBankPolicy} onSave={() => void saveIdeaBankPolicy()} busy={busy === "policy"} /> : null}
+          {tab === "authentication" ? <SSOEditor key={sso?.entra_directory_id ?? "new"} configuration={sso} busy={busy} onSave={saveSSO} onValidate={validateSSO} onActivate={() => setConfirmation({ title: "Move this organisation to Microsoft SSO?", description: `Password sign-in will stop for new sessions. ${sso?.active_user_count ?? 0} active users will be notified, while existing sessions and all TRANSPIRE data remain unchanged.`, confirmLabel: "Move to Microsoft SSO", run: activateSSO })} /> : null}
+        </div>
+      </div>
       <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title ?? "Confirm action"} description={confirmation?.description ?? ""} confirmLabel={confirmation?.confirmLabel ?? "Confirm"} busyLabel="Working" busy={Boolean(busy)} onClose={() => setConfirmation(null)} onConfirm={() => void confirmAction()} />
     </AdminShell>
   );
@@ -218,32 +229,35 @@ export function ConfigurationConsole({ returnedFromSSOValidation = false }: { re
 
 function SSOEditor({ configuration, busy, onSave, onValidate, onActivate }: { configuration: SSOConfiguration | null; busy: string; onSave: (directoryId: string) => Promise<void>; onValidate: () => void; onActivate: () => void }) {
   const [directoryId, setDirectoryId] = useState(configuration?.entra_directory_id ?? "");
-  if (!configuration) return <section className={styles.ssoPanel}><p>Loading Microsoft SSO readiness</p></section>;
+  if (!configuration) return <div className={styles.ssoLoading} role="status">Loading Microsoft SSO readiness</div>;
   const ready = configuration.active_user_count > 0 && configuration.active_user_count === configuration.ready_user_count;
   const validated = Boolean(configuration.validated_at);
   const active = configuration.status === "active";
+  const readiness = active ? { label: "Active", tone: "success" as const, Icon: CheckCircle2 } : ready && validated ? { label: "Ready", tone: "success" as const, Icon: CheckCircle2 } : { label: "Pending", tone: "warning" as const, Icon: Clock };
   return <div className={styles.ssoLayout}>
-    <section className={styles.ssoPanel} aria-labelledby="sso-title">
-      <header><div><p>Microsoft Entra ID</p><h2 id="sso-title">Move sign-in without moving user data.</h2><span>SSO links Microsoft identities to existing TRANSPIRE users, memberships, roles, ideas, projects, and history.</span></div><ShieldCheck size={22} /></header>
+    <SectionCard icon={<KeyRound size={17} />} title="Move sign-in without moving user data." description="SSO links Microsoft identities to existing TRANSPIRE users, memberships, roles, ideas, projects, and history." meta="Microsoft Entra ID">
       <ol className={styles.ssoSteps}>
-        <li data-complete={Boolean(configuration.entra_directory_id)}><span>1</span><div><strong>Connect the directory</strong><small>Use the Microsoft Entra tenant ID for this organisation.</small></div></li>
-        <li data-complete={validated}><span>2</span><div><strong>Validate with an administrator</strong><small>A real Microsoft login must match your current tenant administrator.</small></div></li>
-        <li data-complete={active}><span>3</span><div><strong>Move to SSO</strong><small>New sign-ins use Microsoft only. Existing sessions continue normally.</small></div></li>
+        <SSOStep number={1} complete={Boolean(configuration.entra_directory_id)} title="Connect the directory" detail="Use the Microsoft Entra tenant ID for this organisation." />
+        <SSOStep number={2} complete={validated} title="Validate with an administrator" detail="A real Microsoft login must match your current tenant administrator." />
+        <SSOStep number={3} complete={active} title="Move to SSO" detail="New sign-ins use Microsoft only. Existing sessions continue normally." />
       </ol>
       <div className={shared.field}><label htmlFor="entra-directory-id">Microsoft Entra tenant ID</label><input id="entra-directory-id" value={directoryId} onChange={(event) => setDirectoryId(event.target.value)} placeholder="00000000-0000-0000-0000-000000000000" disabled={active || busy !== ""} /></div>
-      {!configuration.client_id_configured ? <div className={styles.ssoWarning} role="alert"><strong>Platform setup required</strong><span>The Microsoft application credentials must be configured before this directory can be tested.</span></div> : null}
+      {!configuration.client_id_configured ? <div className={styles.ssoWarning} role="alert"><strong><TriangleAlert aria-hidden="true" size={16} />Platform setup required</strong><span>The Microsoft application credentials must be configured before this directory can be tested.</span></div> : null}
       <div className={styles.ssoActions}>
         <button type="button" onClick={() => void onSave(directoryId)} disabled={active || busy !== "" || !directoryId || !configuration.client_id_configured}><Save size={16} />{busy === "sso:save" ? "Saving" : "Save directory"}</button>
         <button type="button" onClick={onValidate} disabled={active || busy !== "" || !configuration.entra_directory_id}><ShieldCheck size={16} />Test Microsoft sign-in</button>
       </div>
-    </section>
-    <section className={styles.ssoReadiness} aria-labelledby="sso-readiness-title">
-      <header><div><p>Cutover readiness</p><h2 id="sso-readiness-title">{active ? "Microsoft SSO is active" : `${configuration.ready_user_count} of ${configuration.active_user_count} people ready`}</h2></div><span data-state={active ? "active" : ready && validated ? "ready" : "pending"}>{active ? "Active" : ready && validated ? "Ready" : "Pending"}</span></header>
+    </SectionCard>
+    <SectionCard className={styles.ssoReadiness} icon={<Users size={17} />} title={active ? "Microsoft SSO is active" : `${configuration.ready_user_count} of ${configuration.active_user_count} people ready`} description="Cutover readiness" actions={<StatusPill tone={readiness.tone} icon={<readiness.Icon aria-hidden="true" size={14} />}>{readiness.label}</StatusPill>}>
       <dl><div><dt>Administrator test</dt><dd>{validated ? `Passed ${new Date(configuration.validated_at!).toLocaleString()}` : "Required"}</dd></div><div><dt>Existing sessions</dt><dd>Remain active until normal expiry</dd></div><div><dt>User notifications</dt><dd>{active ? `${configuration.notification_count} queued` : `${configuration.active_user_count} will be queued`}</dd></div></dl>
-      <div className={styles.ssoPeople}>{configuration.members.map((member) => <div key={member.membership_id}><span><strong>{member.display_name}</strong><small>{member.email}</small></span><em data-ready={member.ready}>{member.linked ? "Linked" : member.ready ? "Ready" : "Action required"}</em></div>)}</div>
-      {!active ? <button className={styles.activateSSO} type="button" onClick={onActivate} disabled={busy !== "" || !ready || !validated}><ShieldCheck size={17} />Move to Microsoft SSO</button> : <p className={styles.activeNote}>Password sign-in is disabled for this tenant. Platform-controlled recovery remains available for SSO repair.</p>}
-    </section>
+      <div className={styles.ssoPeople}>{configuration.members.map((member) => <div key={member.membership_id}><span className={styles.ssoPerson}><strong>{member.display_name}</strong><small>{member.email}</small></span>{member.linked ? <StatusPill tone="success" icon={<Link2 aria-hidden="true" size={14} />}>Linked</StatusPill> : member.ready ? <StatusPill tone="success" icon={<CheckCircle2 aria-hidden="true" size={14} />}>Ready</StatusPill> : <StatusPill tone="warning" icon={<TriangleAlert aria-hidden="true" size={14} />}>Action required</StatusPill>}</div>)}</div>
+      {!active ? <button className={styles.activateSSO} type="button" onClick={onActivate} disabled={busy !== "" || !ready || !validated}><ShieldCheck size={17} />Move to Microsoft SSO</button> : <p className={styles.activeNote}><CheckCircle2 aria-hidden="true" size={16} />Password sign-in is disabled for this tenant. Platform-controlled recovery remains available for SSO repair.</p>}
+    </SectionCard>
   </div>;
+}
+
+function SSOStep({ number, complete, title, detail }: { number: number; complete: boolean; title: string; detail: string }) {
+  return <li data-complete={complete}><span aria-hidden="true">{complete ? <Check size={15} /> : number}</span><div><strong>{complete ? <span className={shared.srOnly}>Complete: </span> : null}{title}</strong><small>{detail}</small></div></li>;
 }
 
 function IdeaBankPolicyEditor({ policy, onChange, onSave, busy }: { policy: IdeaBankPolicy; onChange: (policy: IdeaBankPolicy) => void; onSave: () => void; busy: boolean }) {
@@ -252,7 +266,13 @@ function IdeaBankPolicyEditor({ policy, onChange, onSave, busy }: { policy: Idea
     { value: "operational", label: "Operational", description: "Adds subcategory, process area, SQDCP, baseline, and target." },
     { value: "full", label: "Full context", description: "Also shares the problem statement and business case." },
   ];
-  return <section className={styles.policy}><header><div><p>Tenant sharing policy</p><h2>Decide what the Idea Bank reveals.</h2><span>The backend applies this policy before idea data leaves the tenant boundary.</span></div><Eye size={20} /></header><fieldset><legend>Detail level</legend>{levels.map((level) => <button key={level.value} type="button" aria-pressed={policy.detail_level === level.value} onClick={() => onChange({ ...policy, detail_level: level.value })}><span><strong>{level.label}</strong><small>{level.description}</small></span>{policy.detail_level === level.value ? <span className={styles.selected}><CheckMark /></span> : null}</button>)}</fieldset><div className={styles.policyToggles}><button type="button" aria-pressed={policy.show_contributor} onClick={() => onChange({ ...policy, show_contributor: !policy.show_contributor })}><span><strong>Show contributor name</strong><small>Turn off to share ideas anonymously.</small></span><i data-on={policy.show_contributor}><b /></i></button><button type="button" aria-pressed={policy.show_financials} onClick={() => onChange({ ...policy, show_financials: !policy.show_financials })}><span><strong>Show financial estimates</strong><small>Annual saving, cost avoidance, and investment.</small></span><i data-on={policy.show_financials}><b /></i></button></div><button className={styles.policySave} type="button" onClick={onSave} disabled={busy}><Save size={16} />{busy ? "Saving policy" : "Save visibility policy"}</button></section>;
+  return <SectionCard className={styles.policy} icon={<Eye size={17} />} title="Decide what the Idea Bank reveals." description="The backend applies this policy before idea data leaves the tenant boundary." meta="Tenant sharing policy"><fieldset><legend>Detail level</legend><div className={styles.choices}>{levels.map((level) => <button key={level.value} type="button" aria-pressed={policy.detail_level === level.value} onClick={() => onChange({ ...policy, detail_level: level.value })}><span><strong>{level.label}</strong><small>{level.description}</small></span>{policy.detail_level === level.value ? <span className={styles.selected}><CheckMark /></span> : null}</button>)}</div></fieldset><div className={styles.policyToggles}><button type="button" aria-pressed={policy.show_contributor} onClick={() => onChange({ ...policy, show_contributor: !policy.show_contributor })}><span><strong>Show contributor name</strong><small>Turn off to share ideas anonymously.</small></span><span className={styles.switch}><em aria-hidden="true">{policy.show_contributor ? "On" : "Off"}</em><i data-on={policy.show_contributor}><b /></i></span></button><button type="button" aria-pressed={policy.show_financials} onClick={() => onChange({ ...policy, show_financials: !policy.show_financials })}><span><strong>Show financial estimates</strong><small>Annual saving, cost avoidance, and investment.</small></span><span className={styles.switch}><em aria-hidden="true">{policy.show_financials ? "On" : "Off"}</em><i data-on={policy.show_financials}><b /></i></span></button></div><button className={styles.policySave} type="button" onClick={onSave} disabled={busy}><Save size={16} />{busy ? "Saving policy" : "Save visibility policy"}</button></SectionCard>;
+}
+
+function VersionStatus({ status }: { status: Version["status"] }) {
+  if (status === "published") return <StatusPill tone="success" icon={<CheckCircle2 aria-hidden="true" size={14} />}>Published</StatusPill>;
+  if (status === "draft") return <StatusPill tone="warning" icon={<FilePenLine aria-hidden="true" size={14} />}>Draft</StatusPill>;
+  return <StatusPill icon={<Archive aria-hidden="true" size={14} />}>Retired</StatusPill>;
 }
 
 function CheckMark() { return <span aria-hidden="true">✓</span>; }
@@ -264,9 +284,9 @@ function MasterDataRegister({ kind, items, allItems, query, onQuery, busy, onCre
   const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
   const [allSites, setAllSites] = useState(false);
   const visible = useMemo(() => { const term = query.trim().toLocaleLowerCase(); return term ? items.filter((item) => `${item.name} ${item.code} ${item.is_active ? "active" : "inactive"}`.toLocaleLowerCase().includes(term)) : items; }, [items, query]);
-  return <section className={styles.register} aria-labelledby={`${kind}-title`}>
-    <header><div><p>Reference data</p><h2 id={`${kind}-title`}>{labels[kind].plural}</h2><span>{items.length} configured</span></div><Plus size={20} /></header>
-    <form onSubmit={(event) => { void onCreate(kind, event); setParentId(""); setSelectedSiteIds([]); setAllSites(false); }}>
+  const Icon = registerIcons[kind];
+  return <SectionCard className={styles.register} icon={<Icon size={17} />} title={labels[kind].plural} description="Reference data" meta={`${items.length} configured`}>
+    <form className={styles.registerForm} onSubmit={(event) => { void onCreate(kind, event); setParentId(""); setSelectedSiteIds([]); setAllSites(false); }}>
       <div className={shared.field}><label htmlFor={`${kind}-name`}>{labels[kind].singular} name</label><input id={`${kind}-name`} name="name" required minLength={2} onBlur={(event) => { const code = event.currentTarget.form?.elements.namedItem("code") as HTMLInputElement | null; if (code && !code.value) code.value = slugify(event.currentTarget.value); }} /></div>
       <div className={shared.field}><label htmlFor={`${kind}-code`}>Stable code</label><input id={`${kind}-code`} name="code" required minLength={2} pattern="[a-z0-9]+(?:_[a-z0-9]+)*" placeholder="e.g. quality_assurance" /></div>
       {parentKind ? <SelectField id={`${kind}-parent`} name="parent_id" label={labels[parentKind].singular} value={parentId} onChange={setParentId} disabled={!parents.length} options={parents.length ? parents.map((parent) => ({ value: parent.id, label: parent.name, description: parent.code })) : [{ value: "", label: `Add a ${labels[parentKind].singular.toLowerCase()} first`, description: "A parent record is required" }]} /> : null}
@@ -274,21 +294,21 @@ function MasterDataRegister({ kind, items, allItems, query, onQuery, busy, onCre
       <button className={shared.primary} type="submit" disabled={busy !== "" || Boolean(parentKind && !parentId) || (kind === "department" && !allSites && selectedSiteIds.length === 0)}><Plus size={16} />Add {labels[kind].singular.toLowerCase()}</button>
     </form>
     <SearchField id={`${kind}-search`} label={`Search ${labels[kind].plural.toLowerCase()}`} value={query} onChange={onQuery} placeholder={`Search ${labels[kind].plural.toLowerCase()}`} resultCount={visible.length} />
-    <div className={styles.entries}>{visible.map((item) => <article key={item.id} data-inactive={!item.is_active}><div><strong>{item.name}</strong><span>{item.code}</span>{item.parent_id ? <small>{allItems[parentKind!].find((parent) => parent.id === item.parent_id)?.name}</small> : null}{item.kind === "department" ? <small>{item.applies_to_all_sites ? "All sites" : item.site_ids.map((siteId) => allItems.site.find((site) => site.id === siteId)?.name).filter(Boolean).join(", ") || "No site assigned"}</small> : null}</div><button type="button" onClick={() => onToggle(item)} disabled={busy !== ""} data-tone={item.is_active ? "danger" : "default"}><Power size={14} />{item.is_active ? "Deactivate" : "Reactivate"}</button></article>)}</div>
+    <div className={styles.entries}>{visible.map((item) => <article key={item.id} data-inactive={!item.is_active}><div className={styles.entryText}><span className={styles.entryName}><strong>{item.name}</strong><span className={styles.code}>{item.code}</span></span>{item.parent_id ? <small>{allItems[parentKind!].find((parent) => parent.id === item.parent_id)?.name}</small> : null}{item.kind === "department" ? <small>{item.applies_to_all_sites ? "All sites" : item.site_ids.map((siteId) => allItems.site.find((site) => site.id === siteId)?.name).filter(Boolean).join(", ") || "No site assigned"}</small> : null}</div><div className={styles.entryActions}>{item.is_active ? <StatusPill tone="success" icon={<CheckCircle2 aria-hidden="true" size={14} />}>Active</StatusPill> : <StatusPill icon={<CircleSlash aria-hidden="true" size={14} />}>Inactive</StatusPill>}<button type="button" onClick={() => onToggle(item)} disabled={busy !== ""} data-tone={item.is_active ? "danger" : "default"}><Power size={15} />{item.is_active ? "Deactivate" : "Reactivate"}</button></div></article>)}</div>
     {!visible.length ? <p className={styles.empty}>{items.length ? `No ${labels[kind].plural.toLowerCase()} match “${query}”.` : `Add the first ${labels[kind].singular.toLowerCase()} to establish this register.`}</p> : null}
-  </section>;
+  </SectionCard>;
 }
 
 function WorkflowRegister({ workflows, assignees, stages, setStages, sourceVersion, busy, onCreate, onEdit, onPublish }: { workflows: Workflow[]; assignees: WorkflowAssignee[]; stages: Stage[]; setStages: (stages: Stage[]) => void; sourceVersion: number | null; busy: string; onCreate: (event: FormEvent<HTMLFormElement>) => Promise<void>; onEdit: (version: Version) => void; onPublish: (workflow: Workflow, version: Version) => void }) {
   const update = (index: number, field: keyof Stage, value: string | number | boolean) => setStages(stages.map((stage, position) => position === index ? { ...stage, [field]: value } : stage));
   const updateName = (index: number, value: string) => setStages(stages.map((stage, position) => position === index ? { ...stage, name: value, key: !stage.key || stage.key === slugify(stage.name) ? slugify(value) : stage.key } : stage));
   return <div className={styles.workflowGrid}>
-    <section className={styles.contract}><header><div><p>Versioned contract</p><h2>Idea approval</h2><span>Published versions are retained for audit and in-flight work.</span></div><GitBranch size={20} /></header>
-      {workflows.map((workflow) => <div key={workflow.id} className={styles.timeline}>{workflow.versions.map((version) => <article key={version.id}><div className={styles.versionLine}><strong>Version {version.version}</strong><span data-state={version.status}>{version.status}</span><time>{new Date(version.published_at ?? version.created_at).toLocaleDateString()}</time></div><ol>{version.stages.map((stage) => <li key={stage.key}><span>{stage.name}</span><small>{stage.assignee_name ? `${stage.assignee_name} · ${stage.assignee_email} · ${stage.assignee_status}` : `${stage.approver_role.replaceAll("_", " ")} · legacy assignment`} · {stage.sla_hours}h SLA</small></li>)}</ol><div className={styles.versionActions}>{version.status === "draft" ? <button type="button" onClick={() => onPublish(workflow, version)} disabled={busy !== ""}><Rocket size={15} />Publish version</button> : null}{version.status === "published" ? <button type="button" onClick={() => onEdit(version)} disabled={busy !== ""}><Pencil size={15} />Edit as new version</button> : null}</div></article>)}</div>)}
-    </section>
-    <section className={styles.builder} id="workflow-builder"><header><div><p>Contract builder</p><h2>{sourceVersion ? `Editing from version ${sourceVersion}` : "Create the next draft"}</h2><span>{sourceVersion ? "Changes will be saved as a new draft. The published contract and ideas already using it remain unchanged." : "Assign an accountable person at every stage. Active members and pending invitees are available."}</span></div><Plus size={20} /></header>
-      {!assignees.length ? <p className={styles.assigneeEmpty}>Invite or activate at least one person before building a workflow.</p> : null}
+    <SectionCard icon={<GitBranch size={17} />} title="Idea approval" description="Published versions are retained for audit and in-flight work." meta="Versioned contract">
+      {workflows.map((workflow) => <div key={workflow.id} className={styles.timeline}>{workflow.versions.map((version) => <article key={version.id} data-state={version.status}><div className={styles.versionLine}><strong>Version {version.version}</strong><VersionStatus status={version.status} /><time>{new Date(version.published_at ?? version.created_at).toLocaleDateString()}</time></div><ol>{version.stages.map((stage, index) => <li key={stage.key}><span className={styles.stageIndex} aria-hidden="true">{index + 1}</span><div><strong>{stage.name}</strong><small>{stage.assignee_name ? `${stage.assignee_name} · ${stage.assignee_email} · ${stage.assignee_status}` : `${stage.approver_role.replaceAll("_", " ")} · legacy assignment`} · {stage.sla_hours}h SLA</small></div></li>)}</ol><div className={styles.versionActions}>{version.status === "draft" ? <button type="button" onClick={() => onPublish(workflow, version)} disabled={busy !== ""}><Rocket size={15} />Publish version</button> : null}{version.status === "published" ? <button type="button" onClick={() => onEdit(version)} disabled={busy !== ""}><Pencil size={15} />Edit as new version</button> : null}</div></article>)}</div>)}
+    </SectionCard>
+    <div className={styles.builderAnchor} id="workflow-builder"><SectionCard className={styles.builder} icon={<Plus size={17} />} title={sourceVersion ? `Editing from version ${sourceVersion}` : "Create the next draft"} description={sourceVersion ? "Changes will be saved as a new draft. The published contract and ideas already using it remain unchanged." : "Assign an accountable person at every stage. Active members and pending invitees are available."} meta="Contract builder">
+      {!assignees.length ? <p className={styles.assigneeEmpty}><TriangleAlert aria-hidden="true" size={16} />Invite or activate at least one person before building a workflow.</p> : null}
       <form onSubmit={(event) => void onCreate(event)}>{stages.map((stage, index) => <fieldset key={index}><legend>Stage {index + 1}</legend><div className={shared.field}><label htmlFor={`stage-name-${index}`}>Stage name</label><input id={`stage-name-${index}`} value={stage.name} required minLength={2} onChange={(event) => updateName(index, event.target.value)} /></div><div className={shared.field}><label htmlFor={`stage-key-${index}`}>Stable key</label><input id={`stage-key-${index}`} value={stage.key} required pattern="[a-z0-9]+(?:_[a-z0-9]+)*" onChange={(event) => update(index, "key", event.target.value)} /></div><div className={shared.field}><label htmlFor={`stage-sla-${index}`}>SLA hours</label><input id={`stage-sla-${index}`} type="number" min={1} max={8760} value={stage.sla_hours} required onChange={(event) => update(index, "sla_hours", Number(event.target.value))} /></div><SearchableSelectField id={`stage-assignee-${index}`} name={`stage-assignee-${index}`} label="Approver" value={stage.assignee_membership_id ?? ""} onChange={(value) => update(index, "assignee_membership_id", value)} disabled={!assignees.length} placeholder="Select an approver" searchPlaceholder="Search name, email, or status" emptyMessage="No active members or pending invitees match." options={assignees.map((assignee) => ({ value: assignee.membership_id, label: assignee.display_name, description: assignee.email, status: assignee.status }))} />{stages.length > 1 ? <button className={styles.removeStage} type="button" onClick={() => setStages(stages.filter((_, position) => position !== index))}><Trash2 size={14} />Remove</button> : null}</fieldset>)}<div className={styles.builderActions}><button type="button" onClick={() => setStages([...stages, emptyStage()])}><Plus size={15} />Add stage</button><button className={shared.primary} type="submit" disabled={busy !== "" || !assignees.length || stages.some((stage) => !stage.assignee_membership_id)}><GitBranch size={16} />Create draft version</button></div></form>
-    </section>
+    </SectionCard></div>
   </div>;
 }

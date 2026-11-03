@@ -24,7 +24,7 @@ jobs:
       INSTANCE_ID: ${{ secrets.EC2_INSTANCE_ID || 'i-0edc0d79289958bca' }}
       APP_DIR: ${{ secrets.APP_DIR || '/home/ubuntu/transpire' }}
       AWS_REGION: ${{ secrets.AWS_REGION || 'ap-south-1' }}
-      ENV_PARAMETER: /transpire/qa/env
+      ENV_PARAMETER: /transpire/env
       AWS_PAGER: ""
       AWS_MAX_ATTEMPTS: "3"
     steps:

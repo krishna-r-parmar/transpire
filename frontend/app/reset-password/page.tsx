@@ -19,12 +19,7 @@ export default async function ResetPasswordPage({ params, searchParams }: ResetP
   return (
     <>
       <ResetPasswordForm token={token} />
-      <EnterpriseFooter
-        journeyHref="/#movement"
-        platformHref="/#platform"
-        impactHref="/#impact"
-        topHref="#reset-password-top"
-      />
+      <EnterpriseFooter topHref="#reset-password-top" />
     </>
   );
 }

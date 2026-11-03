@@ -1,12 +1,13 @@
 "use client";
 
-import { Ban, Building2, ChevronDown, CirclePause, Play, Plus, RefreshCw, ShieldAlert, Trash2, UserCheck, UserX, Users } from "lucide-react";
+import { Ban, Building2, CheckCircle2, ChevronDown, CircleDot, CirclePause, Clock, Lock, Mail, Play, Plus, RefreshCw, ShieldAlert, Trash2, UserCheck, UserX, Users, type LucideIcon } from "lucide-react";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { Fragment, FormEvent, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DismissibleNotice } from "@/components/ui/dismissible-notice";
 import { SearchField } from "@/components/ui/search-field";
+import { SectionCard, StatusPill, SummaryStrip } from "@/components/ui/workspace";
 import { apiRequest } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
 import styles from "../admin.module.css";
@@ -35,6 +36,28 @@ type TenantMember = {
   status: string;
   roles: string[];
 };
+
+type Tone = "neutral" | "info" | "success" | "warning" | "danger";
+
+const accountStates: Record<string, { label: string; tone: Tone; Icon: LucideIcon }> = {
+  active: { label: "Active", tone: "success", Icon: CheckCircle2 },
+  pending: { label: "Pending", tone: "info", Icon: Clock },
+  invited: { label: "Invited", tone: "info", Icon: Mail },
+  suspended: { label: "Suspended", tone: "warning", Icon: CirclePause },
+  removed: { label: "Removed", tone: "danger", Icon: Trash2 },
+  inactive: { label: "Inactive", tone: "neutral", Icon: UserX },
+  locked: { label: "Locked", tone: "danger", Icon: Lock },
+};
+
+function AccountStatus({ state }: { state: string }) {
+  const entry = accountStates[state] ?? { label: state.replaceAll("_", " "), tone: "neutral" as const, Icon: CircleDot };
+  return <StatusPill tone={entry.tone} icon={<entry.Icon aria-hidden="true" size={14} />}>{entry.label}</StatusPill>;
+}
+
+function initials(name: string, fallback: string) {
+  const letters = name.split(/\s+/).filter(Boolean).map((word) => word[0]).join("").slice(0, 2);
+  return (letters || fallback.slice(0, 1)).toLocaleUpperCase();
+}
 
 type Confirmation = {
   title: string;
@@ -248,6 +271,10 @@ export function TenantConsole() {
   const visibleTenants = normalizedSearch ? tenants.filter((tenant) => [tenant.name, tenant.slug, tenant.status, tenant.invitation?.email ?? ""].some((value) => value.toLocaleLowerCase().includes(normalizedSearch))) : tenants;
 
   if (loading || !session) return <main className={styles.loading}>Loading administration</main>;
+  const activeCount = tenants.filter((tenant) => tenant.status === "active").length;
+  const suspendedCount = tenants.filter((tenant) => tenant.status === "suspended").length;
+  const removedCount = tenants.filter((tenant) => tenant.status === "removed").length;
+  const awaitingCount = tenants.filter((tenant) => tenant.status !== "removed" && tenant.invitation?.status === "pending").length;
 
   return (
     <AdminShell
@@ -257,26 +284,19 @@ export function TenantConsole() {
       title="Tenant control, without tenant data access."
       description="Provision organisational workspaces, manage their lifecycle, and invite the first accountable administrator."
     >
-      <div className={styles.workspace}>
-        <section className={styles.section} aria-labelledby="create-tenant-title">
-          <div className={styles.sectionHeader}>
-            <div><h2 id="create-tenant-title">Provision a tenant</h2><p>Creates a shortname-based workspace and queues its first administrator invitation.</p></div>
-            <Building2 aria-hidden="true" size={20} />
-          </div>
-          <form className={`${styles.form} ${styles.tenantForm}`} onSubmit={createTenant}>
-            <div className={styles.field}><label htmlFor="tenant-name">Organisation name</label><input id="tenant-name" name="name" required minLength={2} /></div>
-            <div className={styles.field}><label htmlFor="tenant-slug">Workspace shortname</label><input id="tenant-slug" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="example-industries" /><small>Used in /t/example-industries. It is independent of email domains.</small></div>
-            <div className={styles.field}><label htmlFor="tenant-admin-name">First administrator</label><input id="tenant-admin-name" name="admin_name" required /></div>
-            <div className={styles.field}><label htmlFor="tenant-admin-email">Administrator email</label><input id="tenant-admin-email" name="admin_email" type="email" required /></div>
-            <div className={styles.formActions}><button className={styles.primary} type="submit" disabled={submitting}><Plus aria-hidden="true" size={16} /> {submitting ? "Provisioning" : "Create tenant"}</button></div>
-          </form>
-        </section>
-
-        <section className={styles.section} aria-labelledby="tenant-list-title">
-          <div className={styles.sectionHeader}><div><h2 id="tenant-list-title">Platform tenants</h2><p>{tenants.length} workspace{tenants.length === 1 ? "" : "s"} provisioned</p></div></div>
-          {message ? <DismissibleNotice onDismiss={() => setMessage("")}>{message}</DismissibleNotice> : null}
-          {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
-          <div className={styles.listTools}><SearchField id="tenant-search" label="Search platform tenants" value={searchQuery} onChange={setSearchQuery} placeholder="Search organisation, shortname, status, or admin" resultCount={visibleTenants.length} /></div>
+      <SummaryStrip label="Tenant summary" items={[
+        { icon: <Building2 size={18} />, value: tenants.length, label: "Tenants", note: `${removedCount} removed` },
+        { icon: <CheckCircle2 size={18} />, value: activeCount, label: "Active", tone: "success" },
+        { icon: <CirclePause size={18} />, value: suspendedCount, label: "Suspended", tone: suspendedCount ? "warning" : undefined },
+        { icon: <Mail size={18} />, value: awaitingCount, label: "Awaiting first administrator", note: "Invitation pending", tone: awaitingCount ? "warning" : undefined },
+      ]} />
+      {message || error ? <div className={styles.notices}>
+        {message ? <DismissibleNotice onDismiss={() => setMessage("")}>{message}</DismissibleNotice> : null}
+        {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
+      </div> : null}
+      <div className={styles.grid}>
+        <SectionCard icon={<Building2 size={17} />} title="Platform tenants" description={`${tenants.length} workspace${tenants.length === 1 ? "" : "s"} provisioned. Expand an organisation to manage member access.`} flush>
+          <div className={styles.cardTools}><SearchField id="tenant-search" label="Search platform tenants" value={searchQuery} onChange={setSearchQuery} placeholder="Search organisation, shortname, status, or admin" resultCount={visibleTenants.length} /></div>
           {tenants.length ? (
             <div className={styles.tableWrap}>
               <table className={styles.table}>
@@ -289,24 +309,34 @@ export function TenantConsole() {
                   return <Fragment key={tenant.id}>
                     <tr>
                       <td><button className={styles.tenantToggle} type="button" aria-expanded={isExpanded} aria-controls={`tenant-members-${tenant.id}`} onClick={() => void toggleTenant(tenant.id)}><ChevronDown aria-hidden="true" size={16} /><span><strong>{tenant.name}</strong><small>{tenant.slug}</small></span></button></td>
-                      <td>/t/{tenant.slug}</td>
-                      <td><span className={styles.status} data-state={tenant.status}>{tenant.status}</span></td>
-                      <td>{tenant.invitation ? <><strong>{tenant.invitation.display_name}</strong><small>{tenant.invitation.email} · {tenant.invitation.status}</small></> : <small>No open invitation</small>}</td>
-                      <td><div className={styles.rowActions}>{tenant.status !== "removed" ? <>{tenant.status === "active" ? <button type="button" onClick={() => setConfirmation({ title: `Suspend ${tenant.name}?`, description: "Members will be signed out and unable to access this workspace until it is activated again.", confirmLabel: "Suspend tenant", busyLabel: "Suspending", run: () => changeStatus(tenant.id, "suspended") })} disabled={Boolean(busyAction)}><CirclePause aria-hidden="true" size={14} /> Suspend</button> : <button type="button" onClick={() => void changeStatus(tenant.id, "active")} disabled={Boolean(busyAction)}><Play aria-hidden="true" size={14} /> Activate</button>}{tenant.invitation ? <><button type="button" onClick={() => void invitationAction(tenant, "resend")} disabled={Boolean(busyAction)}><RefreshCw aria-hidden="true" size={14} /> Resend</button>{tenant.invitation.status !== "revoked" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: "Revoke administrator invitation?", description: `The current invitation for ${tenant.invitation?.email} will stop working immediately.`, confirmLabel: "Revoke invitation", busyLabel: "Revoking", run: () => invitationAction(tenant, "revoke") })} disabled={Boolean(busyAction)}><Ban aria-hidden="true" size={14} /> Revoke</button> : null}</> : null}<button type="button" data-tone="danger" onClick={() => setConfirmation({ title: `Remove ${tenant.name}?`, description: "This disables the workspace, ends active sessions, and revokes open invitations. Organisational records are retained.", confirmLabel: "Remove tenant", busyLabel: "Removing", confirmationText: tenant.name, run: () => removeTenant(tenant) })} disabled={Boolean(busyAction)}><Trash2 aria-hidden="true" size={14} /> Remove</button></> : <small>Access disabled</small>}</div></td>
+                      <td><span className={styles.path}>/t/{tenant.slug}</span></td>
+                      <td><AccountStatus state={tenant.status} /></td>
+                      <td>{tenant.invitation ? <div className={styles.stack}><strong>{tenant.invitation.display_name}</strong><small>{tenant.invitation.email} · {tenant.invitation.status}</small></div> : <span className={styles.muted}>No open invitation</span>}</td>
+                      <td><div className={styles.rowActions}>{tenant.status !== "removed" ? <>{tenant.status === "active" ? <button type="button" onClick={() => setConfirmation({ title: `Suspend ${tenant.name}?`, description: "Members will be signed out and unable to access this workspace until it is activated again.", confirmLabel: "Suspend tenant", busyLabel: "Suspending", run: () => changeStatus(tenant.id, "suspended") })} disabled={Boolean(busyAction)}><CirclePause aria-hidden="true" size={15} /> Suspend</button> : <button type="button" onClick={() => void changeStatus(tenant.id, "active")} disabled={Boolean(busyAction)}><Play aria-hidden="true" size={15} /> Activate</button>}{tenant.invitation ? <><button type="button" onClick={() => void invitationAction(tenant, "resend")} disabled={Boolean(busyAction)}><RefreshCw aria-hidden="true" size={15} /> Resend</button>{tenant.invitation.status !== "revoked" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: "Revoke administrator invitation?", description: `The current invitation for ${tenant.invitation?.email} will stop working immediately.`, confirmLabel: "Revoke invitation", busyLabel: "Revoking", run: () => invitationAction(tenant, "revoke") })} disabled={Boolean(busyAction)}><Ban aria-hidden="true" size={15} /> Revoke</button> : null}</> : null}<button type="button" data-tone="danger" onClick={() => setConfirmation({ title: `Remove ${tenant.name}?`, description: "This disables the workspace, ends active sessions, and revokes open invitations. Organisational records are retained.", confirmLabel: "Remove tenant", busyLabel: "Removing", confirmationText: tenant.name, run: () => removeTenant(tenant) })} disabled={Boolean(busyAction)}><Trash2 aria-hidden="true" size={15} /> Remove</button></> : <span className={styles.muted}>Access disabled</span>}</div></td>
                     </tr>
                     {isExpanded ? <tr className={styles.accordionRow}><td colSpan={5}><div className={styles.accordionPanel} id={`tenant-members-${tenant.id}`}>
                       <div className={styles.memberHeader}><div><span><Users aria-hidden="true" size={16} /> Member access</span><p>{members.filter((member) => member.status === "active").length} active of {members.length} total</p></div><SearchField id={`member-search-${tenant.id}`} label={`Search members in ${tenant.name}`} value={memberSearch[tenant.id] ?? ""} onChange={(value) => setMemberSearch((current) => ({ ...current, [tenant.id]: value }))} placeholder="Search member, role, or status" resultCount={visibleMembers.length} /></div>
-                      {loadingMembers === tenant.id ? <div className={styles.memberLoading}><span /><span /><span /></div> : members.length ? <div className={styles.memberList}>{visibleMembers.map((member) => <div className={styles.memberRow} key={member.id}><div><strong>{member.display_name}</strong><small>{member.email}</small></div><span className={styles.status} data-state={member.status}>{member.status}</span><p>{member.roles.map((role) => role === "idea_submitter" ? "Employee / Idea Submitter" : role.replaceAll("_", " ")).join(", ") || "No role assigned"}</p><div className={styles.rowActions}>{member.status === "active" ? <button type="button" data-tone="danger" disabled={Boolean(busyAction)} onClick={() => setConfirmation({ title: `Deactivate ${member.display_name}?`, description: `Their access to ${tenant.name} will stop immediately and active sessions will end.`, confirmLabel: "Deactivate member", busyLabel: "Deactivating", run: () => memberAction(tenant, member, "inactive") })}><UserX aria-hidden="true" size={14} /> Deactivate</button> : member.status === "inactive" ? <button type="button" disabled={Boolean(busyAction) || tenant.status !== "active"} onClick={() => void memberAction(tenant, member, "active")}><UserCheck aria-hidden="true" size={14} /> Reactivate</button> : <small>Awaiting acceptance</small>}</div></div>)}</div> : <p className={styles.noResults}>No members have joined this tenant yet.</p>}
+                      {loadingMembers === tenant.id ? <div className={styles.memberLoading}><span /><span /><span /></div> : members.length ? <div className={styles.memberList}>{visibleMembers.map((member) => <div className={styles.memberRow} key={member.id}><div className={styles.person}><span className={styles.avatar} aria-hidden="true">{initials(member.display_name, member.email)}</span><span><strong>{member.display_name}</strong><small>{member.email}</small></span></div><AccountStatus state={member.status} /><p>{member.roles.map((role) => role === "idea_submitter" ? "Employee / Idea Submitter" : role.replaceAll("_", " ")).join(", ") || "No role assigned"}</p><div className={styles.rowActions}>{member.status === "active" ? <button type="button" data-tone="danger" disabled={Boolean(busyAction)} onClick={() => setConfirmation({ title: `Deactivate ${member.display_name}?`, description: `Their access to ${tenant.name} will stop immediately and active sessions will end.`, confirmLabel: "Deactivate member", busyLabel: "Deactivating", run: () => memberAction(tenant, member, "inactive") })}><UserX aria-hidden="true" size={15} /> Deactivate</button> : member.status === "inactive" ? <button type="button" disabled={Boolean(busyAction) || tenant.status !== "active"} onClick={() => void memberAction(tenant, member, "active")}><UserCheck aria-hidden="true" size={15} /> Reactivate</button> : <span className={styles.muted}>Awaiting acceptance</span>}</div></div>)}</div> : <p className={styles.noResults}>No members have joined this tenant yet.</p>}
                       {members.length > 0 && visibleMembers.length === 0 && loadingMembers !== tenant.id ? <p className={styles.noResults}>No members match this search.</p> : null}
-                      {members.some((member) => member.status === "active" && member.roles.includes("tenant_admin")) ? <div className={styles.recoveryControl}><div><span><ShieldAlert aria-hidden="true" size={16} /> Restricted SSO recovery</span><p>Creates a single-use, short-lived session that can repair Microsoft sign-in only.</p></div><div className={styles.field}><label htmlFor={`incident-${tenant.id}`}>Support incident reference</label><input id={`incident-${tenant.id}`} value={recoveryReference[tenant.id] ?? ""} onChange={(event) => setRecoveryReference((current) => ({ ...current, [tenant.id]: event.target.value }))} placeholder="INC-2041" /></div><div className={styles.rowActions}>{members.filter((member) => member.status === "active" && member.roles.includes("tenant_admin")).map((member) => <button type="button" key={member.id} disabled={Boolean(busyAction) || !(recoveryReference[tenant.id] ?? "").trim()} onClick={() => setConfirmation({ title: `Issue restricted recovery to ${member.display_name}?`, description: `The link will allow SSO configuration repair for ${tenant.name} only. Reference: ${recoveryReference[tenant.id]}.`, confirmLabel: "Issue recovery", busyLabel: "Issuing", run: () => issueSSORecovery(tenant, member) })}><ShieldAlert aria-hidden="true" size={14} /> Recover via {member.display_name}</button>)}</div></div> : null}
+                      {members.some((member) => member.status === "active" && member.roles.includes("tenant_admin")) ? <div className={styles.recoveryControl}><div><span><ShieldAlert aria-hidden="true" size={16} /> Restricted SSO recovery</span><p>Creates a single-use, short-lived session that can repair Microsoft sign-in only.</p></div><div className={styles.field}><label htmlFor={`incident-${tenant.id}`}>Support incident reference</label><input id={`incident-${tenant.id}`} value={recoveryReference[tenant.id] ?? ""} onChange={(event) => setRecoveryReference((current) => ({ ...current, [tenant.id]: event.target.value }))} placeholder="INC-2041" /></div><div className={styles.rowActions}>{members.filter((member) => member.status === "active" && member.roles.includes("tenant_admin")).map((member) => <button type="button" key={member.id} disabled={Boolean(busyAction) || !(recoveryReference[tenant.id] ?? "").trim()} onClick={() => setConfirmation({ title: `Issue restricted recovery to ${member.display_name}?`, description: `The link will allow SSO configuration repair for ${tenant.name} only. Reference: ${recoveryReference[tenant.id]}.`, confirmLabel: "Issue recovery", busyLabel: "Issuing", run: () => issueSSORecovery(tenant, member) })}><ShieldAlert aria-hidden="true" size={15} /> Recover via {member.display_name}</button>)}</div></div> : null}
                     </div></td></tr> : null}
                   </Fragment>;
                 })}</tbody>
               </table>
               {visibleTenants.length === 0 ? <p className={styles.noResults}>No tenants match “{searchQuery}”. Try an organisation, shortname, status, or administrator email.</p> : null}
             </div>
-          ) : <p className={styles.empty}>No tenants have been provisioned yet.</p>}
-        </section>
+          ) : <div className={styles.empty}><Building2 aria-hidden="true" size={24} /><p>No tenants have been provisioned yet.</p></div>}
+        </SectionCard>
+
+        <SectionCard icon={<Plus size={17} />} title="Provision a tenant" description="Creates a shortname-based workspace and queues its first administrator invitation." tinted>
+          <form className={styles.form} onSubmit={createTenant}>
+            <div className={styles.field}><label htmlFor="tenant-name">Organisation name</label><input id="tenant-name" name="name" required minLength={2} /></div>
+            <div className={styles.field}><label htmlFor="tenant-slug">Workspace shortname</label><input id="tenant-slug" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="example-industries" aria-describedby="tenant-slug-hint" /><small id="tenant-slug-hint">Used in /t/example-industries. It is independent of email domains.</small></div>
+            <div className={styles.field}><label htmlFor="tenant-admin-name">First administrator</label><input id="tenant-admin-name" name="admin_name" required /></div>
+            <div className={styles.field}><label htmlFor="tenant-admin-email">Administrator email</label><input id="tenant-admin-email" name="admin_email" type="email" required /></div>
+            <button className={styles.primary} type="submit" disabled={submitting}><Plus aria-hidden="true" size={16} /> {submitting ? "Provisioning" : "Create tenant"}</button>
+          </form>
+        </SectionCard>
       </div>
       <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title ?? "Confirm action"} description={confirmation?.description ?? ""} confirmLabel={confirmation?.confirmLabel ?? "Confirm"} busyLabel={confirmation?.busyLabel} confirmationText={confirmation?.confirmationText} busy={confirming} onClose={() => setConfirmation(null)} onConfirm={confirmAction} />
     </AdminShell>

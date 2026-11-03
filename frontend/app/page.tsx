@@ -13,12 +13,16 @@ export const metadata: Metadata = {
   description: "TRANSPIRE combines transformation and inspiration to move employee ideas into measurable organisational improvement.",
 };
 
-const movement = [
-  ["01", "See it", "Recognise the opportunity hidden inside everyday work."],
-  ["02", "Share it", "Give the observation enough context to travel clearly."],
-  ["03", "Shape it", "Bring knowledge and judgement together around the idea."],
-  ["04", "Move it", "Create ownership, direction, and a visible next step."],
-  ["05", "Prove it", "Carry the result forward as organisational learning."],
+const triad = [
+  ["Ideate.", "Write down what you see in a couple of minutes, with prompts that help the idea land."],
+  ["Transform.", "Reviewers and experts shape it into an approved project with a clear owner."],
+  ["Inspire.", "The result goes into the Idea Bank, so the next team starts further ahead."],
+];
+
+const roles = [
+  ["Contributors", "Share what you notice", "Submit ideas, follow their progress, and see the difference they made."],
+  ["Reviewers", "Decide with context", "Every idea arrives structured, with evidence and expected value attached."],
+  ["OpEx leads", "Run the programme", "Configure approvals, track projects, and report realised benefit."],
 ];
 
 const principles = [
@@ -27,12 +31,6 @@ const principles = [
   ["A shared Idea Bank", "Make organisational learning discoverable while tenant-defined visibility protects sensitive detail."],
   ["Tenant-ready foundations", "Give each organisation an isolated workspace, its own configuration, and room to scale on one platform."],
 ];
-
-const landingSectionVisibility = {
-  movement: false,
-  signalInterlude: false,
-  continuousImprovementStory: false,
-} as const;
 
 export default function LandingPage() {
   return (
@@ -44,18 +42,18 @@ export default function LandingPage() {
           <Image src="/brand/transpire-logo.png" alt="TRANSPIRE, Ideate. Transform. Inspire." width={1400} height={371} priority />
         </Link>
         <nav className={styles.nav} aria-label="Primary navigation">
-          {landingSectionVisibility.movement ? <a href="#movement">How ideas move</a> : null}
-          <a href="#platform">Platform capabilities</a>
-          <a href="#journey">Begin your journey</a>
+          <a href="#how">How it works</a>
+          <a href="#who">Who it&apos;s for</a>
+          <a href="#platform">Platform</a>
         </nav>
         <ThemeToggle />
-        <Link className={styles.signIn} href="/sign-in" scroll>Sign in <span aria-hidden="true">↗</span></Link>
+        <Link className={styles.signIn} href="/sign-in" scroll>Sign in</Link>
         <details className={styles.mobileMenu}>
           <summary aria-label="Open navigation"><span /><span /></summary>
           <nav aria-label="Mobile navigation">
-            {landingSectionVisibility.movement ? <a href="#movement">How ideas move</a> : null}
-            <a href="#platform">Platform capabilities</a>
-            <a href="#journey">Begin your journey</a>
+            <a href="#how">How it works</a>
+            <a href="#who">Who it&apos;s for</a>
+            <a href="#platform">Platform</a>
             <Link href="/sign-in" scroll>Sign in to TRANSPIRE</Link>
           </nav>
         </details>
@@ -63,86 +61,70 @@ export default function LandingPage() {
 
       <main id="main-content">
         <section className={styles.hero} aria-labelledby="hero-heading">
-          <HeroVideo />
-          <div className={styles.heroShade} aria-hidden="true" />
-          <div className={styles.signalField} aria-hidden="true"><i /><i /><i /></div>
-          <div className={styles.heroContent}>
-            <p className={styles.eyebrow}>The organisational idea-management platform</p>
-            <h1 id="hero-heading"><span>Ideate.</span><span className={styles.red}>Transform.</span><span className={styles.blue}>Inspire.</span></h1>
-            <p className={styles.motto}>Transform ideas. Inspire progress.</p>
-            <p className={styles.lead}>Make every observation easier to see, strengthen, and move toward meaningful change.</p>
-            <div className={styles.actions}>
-              <a className={styles.primaryAction} href="#platform">Explore capabilities <span aria-hidden="true">↓</span></a>
-              <a className={styles.secondaryAction} href="#journey">Begin your journey</a>
+          <div className={styles.glow} aria-hidden="true" />
+          <div className={styles.heroInner}>
+            <div className={styles.heroCopy}>
+              <p className={styles.kicker}>Ideate. Transform. Inspire.</p>
+              <h1 id="hero-heading">
+                Every improvement starts with someone who{" "}
+                <span className={styles.mark}>
+                  noticed.
+                  <svg viewBox="0 0 300 40" preserveAspectRatio="none" aria-hidden="true">
+                    <path d="M4 30 C 80 34, 160 30, 230 18 S 280 6, 292 4" />
+                    <path d="M274 2 L294 3 L286 20" />
+                  </svg>
+                </span>
+              </h1>
+              <p className={styles.lead}>TRANSPIRE gives that observation a place to go, people to shape it, and a visible path to real change.</p>
+              <div className={styles.actions}>
+                <Link className={styles.primaryAction} href="/sign-in" scroll>Share an idea <span aria-hidden="true">↗</span></Link>
+                <a className={styles.secondaryAction} href="#how">See how it works</a>
+              </div>
             </div>
-          </div>
-          <div className={styles.heroFoot}>
-            <span>Insight</span><i aria-hidden="true" /><span>Ownership</span><i aria-hidden="true" /><span>Outcome</span>
+            <AmbientBulbVideo className={styles.bulb} />
           </div>
         </section>
 
-        {landingSectionVisibility.movement ? <section className={styles.movement} id="movement" aria-labelledby="movement-heading">
-          <Reveal className={styles.movementIntro}>
-            <p className={styles.eyebrow}>Momentum with meaning</p>
-            <h2 id="movement-heading">A clear path gives an idea the confidence to move.</h2>
-            <p>TRANSPIRE connects participation, governance, action, and learning without flattening the context that made the idea matter.</p>
-          </Reveal>
-          <Reveal className={styles.movementTrack}>
-            {movement.map(([number, title, description]) => (
-              <article key={number}>
-                <span>{number}</span><h3>{title}</h3><p>{description}</p>
-              </article>
+        <section className={styles.triad} id="how" aria-label="How TRANSPIRE works">
+          <div className={styles.triadInner}>
+            {triad.map(([title, description]) => (
+              <article key={title}><h2>{title}</h2><p>{description}</p></article>
             ))}
-          </Reveal>
-        </section> : null}
+          </div>
+        </section>
 
-        {landingSectionVisibility.signalInterlude ? <section className={styles.imageInterlude} aria-label="Ideas becoming shared momentum">
-          <div className={styles.interludeImage} aria-hidden="true" />
-          <div className={styles.interludeLines} aria-hidden="true"><i /><i /></div>
-          <Reveal className={styles.interludeCopy}>
-            <p className={styles.eyebrow}>From signal to shared direction</p>
-            <h2>Improvement becomes real when the next step is visible.</h2>
+        <section className={styles.roles} id="who" aria-labelledby="roles-heading">
+          <Reveal className={styles.rolesIntro}>
+            <h2 id="roles-heading">One place for everyone who improves the work</h2>
+            <p>Each person sees what they need, in their own organisation&apos;s private workspace.</p>
           </Reveal>
-        </section> : null}
+          <div className={styles.roleGrid}>
+            {roles.map(([who, title, description]) => (
+              <article key={who}><span>{who}</span><h3>{title}</h3><p>{description}</p></article>
+            ))}
+          </div>
+        </section>
 
         <section className={styles.platform} id="platform" aria-labelledby="platform-heading">
-          <div className={styles.impactBackground} aria-hidden="true" />
-          <AmbientBulbVideo className={styles.ambientBulb} />
-          <Reveal className={styles.platformHeading}>
-            <p className={styles.eyebrow}>Designed to adapt</p>
-            <h2 id="platform-heading">One platform for ideas, governance, and measurable improvement.</h2>
-            <p className={styles.platformIntro}>TRANSPIRE connects contribution, controlled decision-making, organisational visibility, and tenant-aware administration in one adaptable environment.</p>
-          </Reveal>
-          <Reveal className={styles.principleList}>
-            {principles.map(([title, description], index) => (
-              <article key={title}><span>0{index + 1}</span><h3>{title}</h3><p>{description}</p></article>
+          <h2 id="platform-heading">One platform for ideas, governance, and measurable improvement</h2>
+          <div className={styles.principleList}>
+            {principles.map(([title, description]) => (
+              <article key={title}><h3>{title}</h3><p>{description}</p></article>
             ))}
-          </Reveal>
+          </div>
         </section>
 
-        {landingSectionVisibility.continuousImprovementStory ? <section className={styles.impact} id="impact" aria-labelledby="impact-heading">
-          <div className={styles.impactBackground} aria-hidden="true" />
-          <AmbientBulbVideo className={styles.ambientBulb} />
-          <Reveal className={styles.impactCopy}>
-            <p className={styles.eyebrow}>A continuous improvement story</p>
-            <h2 id="impact-heading">See the energy. Guide the work. Prove the change.</h2>
-            <p>Ideas become organisational capability when contribution, decisions, action, and outcomes remain connected.</p>
-          </Reveal>
-        </section> : null}
-
         <section className={styles.closing} id="journey" aria-labelledby="closing-heading">
-          <div className={styles.closingImage} aria-hidden="true" />
+          <HeroVideo />
           <div className={styles.closingShade} aria-hidden="true" />
-          <div className={styles.closingPulse} aria-hidden="true" />
-          <Reveal className={styles.closingInner}>
-            <p className={styles.eyebrow}>Begin with what you notice</p>
-            <h2 id="closing-heading">You can make a change. Begin your journey?</h2>
-            <Link href="/sign-in" scroll>Enter TRANSPIRE <span aria-hidden="true">↗</span></Link>
-          </Reveal>
+          <div className={styles.closingInner}>
+            <h2 id="closing-heading">Your next idea could be the one that changes the line.</h2>
+            <Link href="/sign-in" scroll>Sign in to TRANSPIRE <span aria-hidden="true">↗</span></Link>
+          </div>
         </section>
       </main>
 
-      <EnterpriseFooter journeyHref="#platform" journeyLabel="Platform capabilities" platformHref="#platform" impactHref="#journey" impactLabel="Begin your journey" topHref="#top" />
+      <EnterpriseFooter topHref="#top" />
     </div>
   );
 }

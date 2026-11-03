@@ -437,7 +437,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
                 aria-current={step === number ? "step" : undefined}
               >
                 <span>{step > number ? <Check size={14} /> : number}</span>
-                <div><strong>{item.label}</strong><small>{item.short}</small></div>
+                <div><strong>{item.label}{step > number ? <span className={styles.visuallyHidden}> (completed)</span> : null}</strong><small>{item.short}</small></div>
               </li>
             );
           })}
@@ -467,8 +467,8 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
               description="Your identity and workspace are attached automatically. Select the operational location where the opportunity was observed."
             >
               <div className={styles.contextGrid}>
-                <ReadOnlyFact label="Submitted by" value={session.user.display_name} meta={session.user.email} />
-                <ReadOnlyFact label="Workspace" value={session.tenant.name} meta="Current tenant" />
+                <ReadOnlyFact label="Submitted by" source="From profile" value={session.user.display_name} meta={session.user.email} />
+                <ReadOnlyFact label="Workspace" source="From workspace" value={session.tenant.name} meta="Current tenant" />
                 <div className={styles.selectWithHelp}>
                   <SelectField
                     id="site"
@@ -516,13 +516,13 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
                   data-active={form.idea_type === "kaizen"}
                   onClick={() => update("idea_type", "kaizen")}
                 >
-                  <span className={styles.choiceIcon}><Sparkles size={19} /></span>
+                  <span className={styles.radioDot} aria-hidden="true" />
                   <span className={styles.choiceCopy}>
-                    <strong>Kaizen</strong>
+                    <strong><Sparkles size={17} aria-hidden="true" />Kaizen</strong>
                     <small>A focused, practical improvement that can usually be tested and adopted within the existing process.</small>
                     <em>Best for: quick changes, local waste removal, standard-work improvements</em>
                   </span>
-                  <span className={styles.choiceState}>{form.idea_type === "kaizen" ? <Check size={15} /> : null}</span>
+                  
                 </button>
                 <button
                   type="button"
@@ -531,13 +531,13 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
                   data-active={form.idea_type === "project"}
                   onClick={() => update("idea_type", "project")}
                 >
-                  <span className={styles.choiceIcon}><Route size={19} /></span>
+                  <span className={styles.radioDot} aria-hidden="true" />
                   <span className={styles.choiceCopy}>
-                    <strong>Project</strong>
+                    <strong><Route size={17} aria-hidden="true" />Project</strong>
                     <small>A structured improvement requiring coordinated delivery, formal analysis, investment, or cross-functional ownership.</small>
                     <em>Best for: DMAIC, capital, compliance, or multi-team change</em>
                   </span>
-                  <span className={styles.choiceState}>{form.idea_type === "project" ? <Check size={15} /> : null}</span>
+                  
                 </button>
               </div>
               {form.idea_type === "project" ? (
@@ -706,7 +706,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
               </div>
               <p className={styles.fxNote}>{fxRate ? `USD equivalents use the ${fxRate.source} rate dated ${new Date(`${fxRate.rate_date}T00:00:00`).toLocaleDateString()}. The dated rate is fixed when the idea is submitted.` : fxUnavailable ? "USD conversion is temporarily unavailable. INR estimates can still be saved and submitted." : "Loading the latest INR to USD reference rate…"}</p>
               <div className={styles.payback} data-calculated={payback !== null}>
-                <CircleDollarSign size={20} />
+                {payback === null ? <CircleDollarSign size={20} /> : <CheckCircle2 size={20} />}
                 <div><span>Indicative payback</span><strong>{payback === null ? "Add investment and annual benefit to calculate" : `${payback.toFixed(1)} months`}</strong><small>Calculated as investment ÷ annual saving and avoidance × 12. Final validation belongs to the approval process.</small></div>
               </div>
             </FormSection>
@@ -732,6 +732,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
               <div><strong>{catalog.approval_contract ? "Ready to submit" : "Approval contract unavailable"}</strong><p>{catalog.approval_contract ? `This idea will enter ${catalog.approval_contract.name}, version ${catalog.approval_contract.version}, when submitted.` : "A Tenant Admin must publish an approval contract before this idea can be submitted. You can still save the draft."}</p></div>
             </div>
 
+            <div className={styles.reviewLayout}><div>
             <ReviewGroup title="Submitter and classification" description="Identity, workspace, location, and catalogue context." onEdit={() => goToStep(1)}>
               <div className={styles.reviewGrid}>
                 <ReviewFact label="Submitted by" value={session.user.display_name} meta={session.user.email} />
@@ -765,7 +766,8 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
               </div>
             </ReviewGroup>
 
-            <ReviewGroup title="Approval workflow" description="The published contract that will be fixed to this idea at submission.">
+            </div>
+            <ReviewGroup title="Approval workflow" description="The published contract that will be fixed to this idea at submission." tinted>
               {catalog.approval_contract ? (
                 <div className={styles.workflowHeader}>
                   <div><Route size={20} /><p><strong>{catalog.approval_contract.name} · Version {catalog.approval_contract.version}</strong><span>{catalog.approval_contract.description || "The organisation’s published idea approval contract."}</span></p></div>
@@ -781,7 +783,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
                   <p className={styles.workflowOutcome}><Check size={16} />All required stages complete → idea approved for the next operational action.</p>
                 </div>
               ) : <div className={styles.missingWorkflow}><Info size={18} /><p>No published approval workflow is currently available. Save this idea as a draft and contact a Tenant Admin.</p></div>}
-            </ReviewGroup>
+            </ReviewGroup></div>
           </section>
         ) : null}
 
@@ -789,6 +791,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
           <button type="button" className={styles.secondary} onClick={back}>
             <ArrowLeft size={16} />{step === 1 ? "Cancel" : `Back to ${backDestination}`}
           </button>
+          <span className={styles.saved} data-saved={Boolean(draft)}>{draft ? <CheckCircle2 size={16} aria-hidden="true" /> : <Clock3 size={16} aria-hidden="true" />}{draft ? `Saved as ${draft.reference}` : "Not saved yet"}</span>
           <div>
             <button type="button" className={styles.secondary} onClick={() => void saveDraft()} disabled={Boolean(busy)}>
               <Save size={16} />{busy === "save" ? "Saving…" : draft ? "Save changes" : "Save draft"}
@@ -821,8 +824,8 @@ function Field({ label, hint, example, count, required = false, invalid = false,
   return <label className={styles.field} data-invalid={invalid}><span><strong>{label}</strong>{required ? <b>Required</b> : <em>Optional</em>}</span>{hint ? <small>{hint}</small> : null}{children}<span className={styles.fieldMeta}>{example ? <i>{example}</i> : <i />}{count ? <em>{count}</em> : null}</span></label>;
 }
 
-function ReadOnlyFact({ label, value, meta }: { label: string; value: string; meta?: string }) {
-  return <div className={styles.readOnlyFact}><span>{label}<LockKeyhole size={13} /></span><strong>{value}</strong>{meta ? <small>{meta}</small> : null}</div>;
+function ReadOnlyFact({ label, source, value, meta }: { label: string; source: string; value: string; meta?: string }) {
+  return <div className={styles.readOnlyFact}><span>{label}</span><div><LockKeyhole size={15} aria-hidden="true" /><strong>{value}</strong><small>{source}</small></div>{meta ? <small>{meta}</small> : null}</div>;
 }
 
 function GuidancePanel({ item }: { item: Item }) {
@@ -830,8 +833,8 @@ function GuidancePanel({ item }: { item: Item }) {
   return <aside className={styles.guidance}><div className={styles.guidanceLead}><Sparkles size={19} /><div><strong>Starter guidance for {item.name}</strong><p>TRANSPIRE has pre-filled empty narrative fields from this pattern. Treat the content as a prompt and replace it with evidence from your situation.</p></div></div><dl><div><dt>Title structure</dt><dd>{guidance.title_template || "Describe the process and intended improvement"}</dd></div><div><dt>Typical problem</dt><dd>{guidance.problem || "Explain the observable current condition"}</dd></div><div><dt>Business-case direction</dt><dd>{guidance.business_case || "Connect the change to measurable operational value"}</dd></div><div><dt>Typical KPI</dt><dd>{guidance.kpi || "Select the measure that best demonstrates improvement"}</dd></div></dl></aside>;
 }
 
-function ReviewGroup({ title, description, onEdit, children }: { title: string; description: string; onEdit?: () => void; children: ReactNode }) {
-  return <section className={styles.reviewGroup}><header><div><h3>{title}</h3><p>{description}</p></div>{onEdit ? <button type="button" onClick={onEdit}><Pencil size={14} />Edit section</button> : null}</header><div>{children}</div></section>;
+function ReviewGroup({ title, description, onEdit, tinted = false, children }: { title: string; description: string; onEdit?: () => void; tinted?: boolean; children: ReactNode }) {
+  return <section className={styles.reviewGroup} data-tinted={tinted}><header><div><h3>{title}</h3><p>{description}</p></div>{onEdit ? <button type="button" onClick={onEdit}><Pencil size={14} />Edit section</button> : null}</header><div>{children}</div></section>;
 }
 
 function ReviewFact({ label, value, meta }: { label: string; value: string; meta?: string }) {

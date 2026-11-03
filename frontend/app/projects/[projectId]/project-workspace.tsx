@@ -6,27 +6,34 @@ import {
   ArrowLeft,
   ArrowUp,
   BarChart3,
+  CalendarClock,
   CheckCircle2,
+  ChevronDown,
   ClipboardList,
   FileClock,
   Flag,
   FolderKanban,
+  IndianRupee,
+  ListChecks,
   Plus,
   RefreshCw,
   ShieldCheck,
   Save,
   Target,
   Trash2,
+  UserRound,
   Users,
 } from "lucide-react";
 import { TenantLink as Link } from "@/components/app/tenant-link";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { SelectField } from "@/components/ui/select-field";
+import { SectionCard, StatusPill, SummaryStrip } from "@/components/ui/workspace";
 import { apiRequest } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
 import { formatLakhs } from "../projects-portfolio-utils";
+import { DeliveryPill, HealthPill, ProjectStatusPill } from "../project-status";
 import styles from "./project-workspace.module.css";
 
 type ActionRecord = {
@@ -78,13 +85,6 @@ const tabs: Array<{ id: Section; label: string; icon: typeof FolderKanban }> = [
   { id: "team", label: "Team", icon: Users },
   { id: "activity", label: "Activity", icon: Activity },
 ];
-
-const projectStatuses: Record<string, string> = {
-  ready_to_start: "Ready to start", in_progress: "In progress", on_hold: "On hold",
-  completion_review: "Completion review", oe_verified: "OE verified",
-  finance_validation: "Finance validation", success: "Success", cancelled: "Cancelled",
-  unsuccessful: "Closed unsuccessful",
-};
 
 export function ProjectWorkspace({ projectId }: { projectId: string }) {
   const router = useRouter();
@@ -139,11 +139,12 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
       eyebrow="Project execution"
       title={project?.reference ?? "Project workspace"}
       description={project?.title ?? "Review the execution baseline and current delivery record."}
+      actions={!loading && project ? <div className={styles.headerPills}><ProjectStatusPill status={project.status} /><HealthPill health={project.health} /></div> : undefined}
     >
       {loading ? <WorkspaceSkeleton /> : null}
       {error ? (
         <section className={styles.error} role="alert">
-          <FolderKanban aria-hidden="true" />
+          <FolderKanban aria-hidden="true" size={26} />
           <h2>{error}</h2>
           <p>The project may no longer be available in this tenant, or the service may be temporarily unavailable.</p>
           <div>
@@ -158,16 +159,14 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
           <div className={styles.workspaceLead}>
             <Link href="/projects"><ArrowLeft aria-hidden="true" size={15} />Projects portfolio</Link>
             <div>
-              <span className={styles.status} data-status={project.status}>
-                {projectStatuses[project.status] ?? project.status}
-              </span>
-              <span>{healthLabel(project.health)}</span>
               <span>Baseline v{project.baseline_version}</span>
-              <Link href={`/ideas/${project.idea_id}`}>{project.idea_reference}</Link>
+              <span>From <Link href={`/ideas/${project.idea_id}`}>{project.idea_reference}</Link></span>
             </div>
           </div>
 
-          <nav className={styles.tabs} aria-label="Project workspace sections">
+          <WorkspaceSummary project={project} />
+
+          <nav className={styles.tabs} role="tablist" aria-label="Project workspace sections">
             {tabs.map((tab) => {
               const Icon = tab.icon;
               return (
@@ -178,7 +177,7 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                   aria-selected={section === tab.id}
                   onClick={() => selectSection(tab.id)}
                 >
-                  <Icon aria-hidden="true" size={15} />{tab.label}
+                  <Icon aria-hidden="true" size={16} />{tab.label}
                 </button>
               );
             })}
@@ -198,38 +197,42 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
   );
 }
 
+function WorkspaceSummary({ project }: { project: ProjectWorkspaceRecord }) {
+  const completed = project.milestones.filter((milestone) => milestone.status === "complete").length;
+  const next = [...project.milestones].sort((left, right) => left.position - right.position).find((milestone) => milestone.status !== "complete");
+  return <SummaryStrip label="Project summary" items={[
+    { icon: <ListChecks size={18} />, value: `${Number(project.progress).toFixed(0)}%`, label: "Complete", note: project.milestones.length ? `${completed} of ${project.milestones.length} milestones` : "Plan not created" },
+    { icon: <IndianRupee size={18} />, value: formatLakhs(project.achieved), label: "Achieved", note: `of ${formatLakhs(project.target)} target`, tone: "success" },
+    { icon: <Users size={18} />, value: project.team.length, label: "Team members", note: `Lead: ${project.lead_name || "Not recorded"}` },
+    { icon: <CalendarClock size={18} />, value: next ? (next.planned_end ? formatShortDate(next.planned_end) : "Not dated") : "None", label: "Next milestone", note: next ? next.title || `Milestone ${next.position}` : project.milestones.length ? "All milestones complete" : "Plan not created", tone: next ? "warning" : undefined },
+  ]} />;
+}
+
 function Overview({ project }: { project: ProjectWorkspaceRecord }) {
   return (
-    <div className={styles.overview}>
-      <section className={styles.deliveryLedger} aria-label="Delivery summary">
-        <Ledger label="Progress" value={`${Number(project.progress).toFixed(0)}%`} detail={`${project.milestones.length} milestones`} />
-        <Ledger label="Target" value={formatLakhs(project.target)} detail="Forecast plan" />
-        <Ledger label="Achieved" value={formatLakhs(project.achieved)} detail={`${formatLakhs(project.validated)} validated`} />
-        <Ledger label="LOS" value={formatLakhs(project.line_of_sight)} detail={`Projected ${formatLakhs(project.projected_outcome)}`} />
-      </section>
-      <div className={styles.overviewGrid}>
-        <section className={styles.brief}>
-          <SectionHeading icon={Target} eyebrow="Execution brief" title="Objective and scope" description="The active charter baseline defines what this project is accountable for delivering." />
-          <ReadOnly label="SMART objective" value={project.charter.objective} />
-          <div className={styles.scopeGrid}>
-            <ReadOnly label="In scope" value={project.charter.in_scope} />
-            <ReadOnly label="Out of scope" value={project.charter.out_of_scope} />
-          </div>
-        </section>
-        <aside className={styles.facts} aria-label="Project facts">
-          <h2>Project facts</h2>
-          <dl>
-            <Fact label="Project lead" value={project.lead_name} />
-            <Fact label="Sponsor" value={project.charter.sponsor} />
-            <Fact label="Site" value={project.site} />
-            <Fact label="Department" value={project.department} />
-            <Fact label="Start" value={formatDate(project.start_date)} />
-            <Fact label="Target completion" value={formatDate(project.target_completion_date)} />
-            <Fact label="Benefit type" value={labelize(project.charter.benefit_type)} />
-            <Fact label="KPI" value={project.charter.kpi_name} />
-          </dl>
-        </aside>
-      </div>
+    <div className={styles.overviewGrid}>
+      <SectionCard icon={<Target size={17} />} title="Objective and scope" description="The active charter baseline defines what this project is accountable for delivering.">
+        <ReadOnly label="SMART objective" value={project.charter.objective} />
+        <div className={styles.scopeGrid}>
+          <ReadOnly label="In scope" value={project.charter.in_scope} />
+          <ReadOnly label="Out of scope" value={project.charter.out_of_scope} />
+        </div>
+      </SectionCard>
+      <SectionCard icon={<FileClock size={17} />} title="Project facts" tinted>
+        <dl className={styles.facts}>
+          <Fact label="Project lead" value={project.lead_name} />
+          <Fact label="Sponsor" value={project.charter.sponsor} />
+          <Fact label="Site" value={project.site} />
+          <Fact label="Department" value={project.department} />
+          <Fact label="Start" value={formatDate(project.start_date)} />
+          <Fact label="Target completion" value={formatDate(project.target_completion_date)} />
+          <Fact label="Benefit type" value={labelize(project.charter.benefit_type)} />
+          <Fact label="KPI" value={project.charter.kpi_name} />
+          <Fact label="Validated" value={formatLakhs(project.validated)} />
+          <Fact label="LOS" value={formatLakhs(project.line_of_sight)} />
+          <Fact label="Projected" value={formatLakhs(project.projected_outcome)} />
+        </dl>
+      </SectionCard>
     </div>
   );
 }
@@ -287,39 +290,43 @@ function Milestones({ project, onSaved }: { project: ProjectWorkspaceRecord; onS
     finally { setSaving(false); }
   };
 
+  const editButton = project.can_manage_plan && !editing ? <button className={styles.primaryButton} type="button" onClick={() => setEditing(true)}>Edit milestone plan</button> : undefined;
   return (
-    <section>
-      <div className={styles.plannerHeading}><SectionHeading icon={Flag} eyebrow="Delivery plan" title="Milestones and nested actions" description="Progress is weighted across outcome-based milestones. Actions sit inside the milestone they support." />{project.can_manage_plan && !editing ? <button type="button" onClick={() => setEditing(true)}>Edit milestone plan</button> : null}</div>
+    <SectionCard icon={<Flag size={17} />} title="Milestones and nested actions" description="Progress is weighted across outcome-based milestones. Actions sit inside the milestone they support." meta={project.milestones.length && !editing ? `${project.milestones.length} milestones` : undefined} actions={editButton} flush={!editing && project.milestones.length > 0}>
       {message ? <div className={styles.planMessage} role="alert">{message}</div> : null}
       {editing ? <div className={styles.planToolbar}><span>Total weight <strong data-invalid={totalWeight > 100}>{totalWeight}%</strong></span><div><button type="button" onClick={() => { setDraft(structuredClone(project.milestones)); setEditing(false); setMessage(""); }}>Cancel</button><button type="button" onClick={() => void savePlan()} disabled={saving || totalWeight > 100}><Save aria-hidden="true" size={14} />{saving ? "Saving plan" : "Save plan"}</button></div></div> : null}
-      {(editing ? draft.length : project.milestones.length) ? (
+      {!editing && project.milestones.length ? <MilestoneTable milestones={project.milestones} /> : null}
+      {editing && draft.length ? (
         <div className={styles.milestones}>
-          {(editing ? draft : project.milestones).map((milestone, index) => (
+          {draft.map((milestone, index) => (
             <article key={milestone.id}>
               <header>
                 <span>{String(milestone.position).padStart(2, "0")}</span>
-                <div><p>{labelize(milestone.status)}</p>{editing ? <input className={styles.titleInput} aria-label={`Milestone ${index + 1} title`} value={milestone.title} onChange={(event) => updateMilestone(index, "title", event.target.value)} placeholder="Milestone title" /> : <h3>{milestone.title}</h3>}</div>
+                <div><DeliveryPill status={milestone.status} /><input className={styles.titleInput} aria-label={`Milestone ${index + 1} title`} value={milestone.title} onChange={(event) => updateMilestone(index, "title", event.target.value)} placeholder="Milestone title" /></div>
                 <strong>{Number(milestone.progress).toFixed(0)}%</strong>
               </header>
-              {editing ? <div className={styles.orderActions}><button type="button" disabled={index === 0} onClick={() => moveMilestone(index, -1)} aria-label={`Move ${milestone.title || `milestone ${index + 1}`} up`}><ArrowUp size={14} /></button><button type="button" disabled={index === draft.length - 1} onClick={() => moveMilestone(index, 1)} aria-label={`Move ${milestone.title || `milestone ${index + 1}`} down`}><ArrowDown size={14} /></button><button type="button" onClick={() => removeMilestone(index)}><Trash2 size={14} />Remove</button></div> : null}
+              <div className={styles.orderActions}><button type="button" disabled={index === 0} onClick={() => moveMilestone(index, -1)} aria-label={`Move ${milestone.title || `milestone ${index + 1}`} up`}><ArrowUp size={14} /></button><button type="button" disabled={index === draft.length - 1} onClick={() => moveMilestone(index, 1)} aria-label={`Move ${milestone.title || `milestone ${index + 1}`} down`}><ArrowDown size={14} /></button><button type="button" onClick={() => removeMilestone(index)}><Trash2 size={14} />Remove</button></div>
               <div className={styles.progressTrack}><span style={{ width: `${milestone.progress}%` }} /></div>
-              {editing ? <MilestoneFields milestone={milestone} index={index} milestones={draft} candidates={project.owner_candidates} onChange={updateMilestone} /> : <dl className={styles.milestoneFacts}>
-                <Fact label="Owner" value={milestone.owner_name} />
-                <Fact label="Weight" value={`${Number(milestone.weight).toFixed(0)}%`} />
-                <Fact label="Planned" value={dateRange(milestone.planned_start, milestone.planned_end)} />
-                <Fact label="Outcome" value={milestone.outcome} />
-              </dl>}
-              {!editing ? <><ReadOnly label="Completion criteria" value={milestone.completion_criteria} />{milestone.evidence ? <ReadOnly label="Evidence" value={milestone.evidence} /> : null}</> : null}
-              {editing ? <ActionEditor milestone={milestone} milestoneIndex={index} candidates={project.owner_candidates} onAdd={addAction} onChange={updateAction} onRemove={(actionIndex) => updateMilestone(index, "actions", milestone.actions.filter((_, itemIndex) => itemIndex !== actionIndex))} /> : milestone.actions.length ? <ActionTable actions={milestone.actions} /> : <p className={styles.inlineEmpty}>No actions have been added to this milestone.</p>}
+              <MilestoneFields milestone={milestone} index={index} milestones={draft} candidates={project.owner_candidates} onChange={updateMilestone} />
+              <ActionEditor milestone={milestone} milestoneIndex={index} candidates={project.owner_candidates} onAdd={addAction} onChange={updateAction} onRemove={(actionIndex) => updateMilestone(index, "actions", milestone.actions.filter((_, itemIndex) => itemIndex !== actionIndex))} />
             </article>
           ))}
         </div>
-      ) : (
-        editing ? <div className={styles.emptyPlan}><p>Add the first outcome-based milestone. Weights across the plan can total up to 100%.</p></div> : <EmptyState icon={ClipboardList} title="The milestone plan has not been created yet." text={`${project.charter.action_items.length} charter action${project.charter.action_items.length === 1 ? " is" : "s are"} preserved in Baseline v${project.baseline_version}. Milestone planning will organise that work into weighted outcomes.`} />
-      )}
+      ) : null}
+      {editing && !draft.length ? <div className={styles.emptyPlan}><p>Add the first outcome-based milestone. Weights across the plan can total up to 100%.</p></div> : null}
+      {!editing && !project.milestones.length ? <EmptyState icon={ClipboardList} title="The milestone plan has not been created yet." text={`${project.charter.action_items.length} charter action${project.charter.action_items.length === 1 ? " is" : "s are"} preserved in Baseline v${project.baseline_version}. Milestone planning will organise that work into weighted outcomes.`} /> : null}
       {editing ? <button className={styles.addMilestone} type="button" onClick={addMilestone}><Plus aria-hidden="true" size={15} />Add milestone</button> : null}
-    </section>
+    </SectionCard>
   );
+}
+
+function MilestoneTable({ milestones }: { milestones: MilestoneRecord[] }) {
+  const [expanded, setExpanded] = useState("");
+  return <div className={styles.tableWrap}><table className={styles.milestoneTable}><thead><tr><th>Milestone</th><th>Owner</th><th>Planned</th><th className={styles.numeric}>Weight</th><th>Progress</th><th>Status</th><th><span className={styles.srOnly}>Details</span></th></tr></thead><tbody>{milestones.map((milestone) => {
+    const open = expanded === milestone.id;
+    const progress = Math.min(100, Math.max(0, Number(milestone.progress) || 0));
+    return <Fragment key={milestone.id}><tr><td><div className={styles.milestoneCell}><span className={styles.position}>{String(milestone.position).padStart(2, "0")}</span><strong className={styles.milestoneTitle}>{milestone.title}</strong>{milestone.outcome ? <small>{milestone.outcome}</small> : null}</div></td><td>{milestone.owner_name || "Not provided"}</td><td className={styles.nowrap}>{dateRange(milestone.planned_start, milestone.planned_end)}</td><td className={styles.numeric}>{Number(milestone.weight).toFixed(0)}%</td><td><div className={styles.barRow}><span className={styles.bar} data-tone={milestone.status === "blocked" ? "danger" : milestone.status === "complete" ? "success" : undefined} aria-hidden="true"><span style={{ width: `${progress}%` }} /></span><strong>{Number(milestone.progress).toFixed(0)}%</strong></div></td><td><DeliveryPill status={milestone.status} /></td><td><button className={styles.expand} type="button" onClick={() => setExpanded((current) => current === milestone.id ? "" : milestone.id)} aria-expanded={open} aria-label={`${open ? "Hide" : "Show"} criteria and actions for ${milestone.title || `milestone ${milestone.position}`}`}><ChevronDown size={16} /></button></td></tr>{open ? <tr className={styles.detailRow}><td colSpan={7}><div className={styles.milestoneDetail}><ReadOnly label="Completion criteria" value={milestone.completion_criteria} />{milestone.evidence ? <ReadOnly label="Evidence" value={milestone.evidence} /> : null}{milestone.actions.length ? <ActionTable actions={milestone.actions} /> : <p className={styles.inlineEmpty}>No actions have been added to this milestone.</p>}</div></td></tr> : null}</Fragment>;
+  })}</tbody></table></div>;
 }
 
 function MilestoneFields({ milestone, index, milestones, candidates, onChange }: { milestone: MilestoneRecord; index: number; milestones: MilestoneRecord[]; candidates: ProjectWorkspaceRecord["owner_candidates"]; onChange: (index: number, field: keyof MilestoneRecord, value: unknown) => void }) {
@@ -333,85 +340,82 @@ function ActionEditor({ milestone, milestoneIndex, candidates, onAdd, onChange, 
 
 function Benefits({ project }: { project: ProjectWorkspaceRecord }) {
   return (
-    <section>
-      <SectionHeading icon={BarChart3} eyebrow="Benefit forecast" title="Benefits and line of sight" description="Target, achieved, Finance-validated value, and remaining line of sight stay separate throughout delivery." />
+    <>
       <section className={styles.financeLedger} aria-label="Financial benefit summary">
         <Ledger label="Target" value={formatLakhs(project.target)} detail="Published plan" />
         <Ledger label="Achieved" value={formatLakhs(project.achieved)} detail="Reported to date" />
         <Ledger label="Finance validated" value={formatLakhs(project.validated)} detail="Approved evidence" />
         <Ledger label="LOS" value={formatLakhs(project.line_of_sight)} detail="Expected to materialise" />
       </section>
-      {project.benefit_periods.length ? (
-        <div className={styles.tableWrap}>
-          <table>
-            <thead><tr><th>Period</th><th>Plan</th><th>Achieved</th><th>LOS</th><th>KPI actual</th><th>Delivery</th><th>Finance</th></tr></thead>
-            <tbody>{project.benefit_periods.map((period) => <tr key={period.month}><th scope="row">{period.month}</th><td>{formatLakhs(period.plan)}</td><td>{formatLakhs(period.achieved)}</td><td>{formatLakhs(period.line_of_sight)}</td><td>{period.kpi_actual ?? "Not recorded"}</td><td>{period.status ? labelize(period.status) : "Not assessed"}</td><td><span className={styles.financeState} data-approved={period.finance_approved}>{period.finance_approved ? "Validated" : "Pending"}</span></td></tr>)}</tbody>
-          </table>
-        </div>
-      ) : <EmptyState icon={BarChart3} title="No benefit periods are recorded." text="Monthly plan, actual, LOS, KPI, and Finance state will appear here when benefit tracking begins." />}
-    </section>
+      <SectionCard icon={<BarChart3 size={17} />} title="Benefits and line of sight" description="Target, achieved, Finance-validated value, and remaining line of sight stay separate throughout delivery." meta={project.benefit_periods.length ? `${project.benefit_periods.length} periods` : undefined} flush={project.benefit_periods.length > 0}>
+        {project.benefit_periods.length ? (
+          <div className={styles.tableWrap}>
+            <table>
+              <thead><tr><th>Period</th><th className={styles.numeric}>Plan</th><th className={styles.numeric}>Achieved</th><th className={styles.numeric}>LOS</th><th>KPI actual</th><th>Delivery</th><th>Finance</th></tr></thead>
+              <tbody>{project.benefit_periods.map((period) => <tr key={period.month}><th scope="row">{period.month}</th><td className={styles.numeric}>{formatLakhs(period.plan)}</td><td className={styles.numeric}>{formatLakhs(period.achieved)}</td><td className={styles.numeric}>{formatLakhs(period.line_of_sight)}</td><td>{period.kpi_actual ?? "Not recorded"}</td><td>{period.status ? labelize(period.status) : "Not assessed"}</td><td>{period.finance_approved ? <StatusPill tone="success" icon={<ShieldCheck size={14} aria-hidden="true" />}>Validated</StatusPill> : <StatusPill tone="warning" icon={<FileClock size={14} aria-hidden="true" />}>Pending</StatusPill>}</td></tr>)}</tbody>
+            </table>
+          </div>
+        ) : <EmptyState icon={BarChart3} title="No benefit periods are recorded." text="Monthly plan, actual, LOS, KPI, and Finance state will appear here when benefit tracking begins." />}
+      </SectionCard>
+    </>
   );
 }
 
 function Charter({ project }: { project: ProjectWorkspaceRecord }) {
   return (
-    <section>
-      <SectionHeading icon={FileClock} eyebrow="Governed baseline" title="Charter and revisions" description="The active baseline remains the execution reference. Every future OE revision will retain its reason and author." />
-      <div className={styles.charterGrid}>
+    <div className={styles.charterGrid}>
+      <SectionCard icon={<FileClock size={17} />} title="Published baselines" description="Every OE revision retains its reason and author." flush>
         <div className={styles.baselines}>
-          <h3>Published baselines</h3>
-          {project.baselines.map((baseline) => <article key={baseline.id} data-active={baseline.is_active}><span>v{baseline.version}</span><div><strong>{baseline.reason}</strong><p>{baseline.created_by_name} · {formatDateTime(baseline.published_at)}</p></div>{baseline.is_active ? <i><ShieldCheck aria-hidden="true" size={13} />Active</i> : null}</article>)}
+          {project.baselines.map((baseline) => <article key={baseline.id} data-active={baseline.is_active}><span>v{baseline.version}</span><div><strong>{baseline.reason}</strong><small>{baseline.created_by_name} · {formatDateTime(baseline.published_at)}</small></div>{baseline.is_active ? <StatusPill tone="success" icon={<ShieldCheck aria-hidden="true" size={14} />}>Active</StatusPill> : null}</article>)}
         </div>
-        <div className={styles.charterRecord}>
-          <h3>Baseline v{project.baseline_version}</h3>
-          <dl>
-            <Fact label="Leader" value={project.charter.leader} />
-            <Fact label="Sponsor" value={project.charter.sponsor} />
-            <Fact label="Approved budget" value={project.charter.budget_approved ? `₹${Number(project.charter.budget_approved).toLocaleString("en-IN")}` : null} />
-            <Fact label="Belt level" value={project.charter.belt_level} />
-            <Fact label="Impact areas" value={project.charter.impact_areas.map(labelize).join(", ")} />
-            <Fact label="Additional team" value={project.charter.team_members.join(", ")} />
-          </dl>
+      </SectionCard>
+      <SectionCard icon={<ShieldCheck size={17} />} title={`Baseline v${project.baseline_version}`} description="The active baseline remains the execution reference.">
+        <dl className={styles.facts}>
+          <Fact label="Leader" value={project.charter.leader} />
+          <Fact label="Sponsor" value={project.charter.sponsor} />
+          <Fact label="Approved budget" value={project.charter.budget_approved ? `₹${Number(project.charter.budget_approved).toLocaleString("en-IN")}` : null} />
+          <Fact label="Belt level" value={project.charter.belt_level} />
+          <Fact label="Impact areas" value={project.charter.impact_areas.map(labelize).join(", ")} />
+          <Fact label="Additional team" value={project.charter.team_members.join(", ")} />
+        </dl>
+        <div className={styles.charterText}>
           <ReadOnly label="Objective" value={project.charter.objective} />
           <div className={styles.scopeGrid}><ReadOnly label="In scope" value={project.charter.in_scope} /><ReadOnly label="Out of scope" value={project.charter.out_of_scope} /></div>
         </div>
-      </div>
-    </section>
+      </SectionCard>
+    </div>
   );
 }
 
 function Team({ project }: { project: ProjectWorkspaceRecord }) {
   return (
-    <section>
-      <SectionHeading icon={Users} eyebrow="People and ownership" title="Project team" description="The Project Lead and assigned team can contribute to delivery. Invitation responses remain visible without blocking the project." />
-      <div className={styles.teamLead}><Users aria-hidden="true" /><div><p>Project lead</p><h3>{project.lead_name || "Not recorded"}</h3><span>{[project.department, project.site].filter(Boolean).join(" · ") || "Organisation assignment not recorded"}</span></div></div>
-      {project.team.length ? <div className={styles.teamList}>{project.team.map((member) => <article key={member.id}><span aria-hidden="true">{initials(member.name)}</span><div><strong>{member.name}</strong><p>{member.email}</p></div><i data-status={member.status}>{labelize(member.status)}</i></article>)}</div> : <EmptyState icon={Users} title="No TRANSPIRE members were assigned." text="Additional names from the published charter remain visible in Charter & revisions." />}
-    </section>
+    <SectionCard icon={<Users size={17} />} title="Project team" description="The Project Lead and assigned team can contribute to delivery. Invitation responses remain visible without blocking the project." meta={project.team.length ? `${project.team.length} members` : undefined} flush>
+      <div className={styles.teamLead}><span aria-hidden="true"><UserRound size={20} /></span><div><small>Project lead</small><h3>{project.lead_name || "Not recorded"}</h3><span>{[project.department, project.site].filter(Boolean).join(" · ") || "Organisation assignment not recorded"}</span></div></div>
+      {project.team.length ? <div className={styles.teamList}>{project.team.map((member) => <article key={member.id}><span aria-hidden="true">{initials(member.name)}</span><div><strong>{member.name}</strong><small>{member.email}</small></div><StatusPill tone={member.status === "accepted" ? "success" : "warning"} icon={member.status === "accepted" ? <CheckCircle2 size={14} aria-hidden="true" /> : <FileClock size={14} aria-hidden="true" />}>{labelize(member.status)}</StatusPill></article>)}</div> : <EmptyState icon={Users} title="No TRANSPIRE members were assigned." text="Additional names from the published charter remain visible in Charter & revisions." />}
+    </SectionCard>
   );
 }
 
 function ActivityPanel({ project }: { project: ProjectWorkspaceRecord }) {
   return (
-    <section>
-      <SectionHeading icon={Activity} eyebrow="Traceable history" title="Project activity" description="Submission, approval, charter, and future execution events are retained in chronological order." />
-      {project.activity.length ? <ol className={styles.activityList}>{project.activity.map((event) => <li key={event.id}><span><CheckCircle2 aria-hidden="true" size={14} /></span><div><strong>{event.summary}</strong><p>{event.actor_name ?? "System"} · {formatDateTime(event.created_at)}</p></div><i>{labelize(event.event_type.replace(".", " "))}</i></li>)}</ol> : <EmptyState icon={Activity} title="No activity has been recorded." text="Governed project events will appear here as the execution lifecycle advances." />}
-    </section>
+    <SectionCard icon={<Activity size={17} />} title="Project activity" description="Submission, approval, charter, and future execution events are retained in chronological order." meta={project.activity.length ? `${project.activity.length} events` : undefined} flush>
+      {project.activity.length ? <ol className={styles.activityList}>{project.activity.map((event) => <li key={event.id}><span><CheckCircle2 aria-hidden="true" size={15} /></span><div><strong>{event.summary}</strong><small>{event.actor_name ?? "System"} · {formatDateTime(event.created_at)}</small></div><i>{labelize(event.event_type.replace(".", " "))}</i></li>)}</ol> : <EmptyState icon={Activity} title="No activity has been recorded." text="Governed project events will appear here as the execution lifecycle advances." />}
+    </SectionCard>
   );
 }
 
 function ActionTable({ actions }: { actions: ActionRecord[] }) {
-  return <div className={styles.actionTable}><table><thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead><tbody>{actions.map((action) => <tr key={action.id}><td>{action.title}</td><td>{action.owner_name || "Not assigned"}</td><td>{formatDate(action.due_date)}</td><td>{labelize(action.status)}</td></tr>)}</tbody></table></div>;
+  return <div className={styles.actionTable}><table><thead><tr><th>Action</th><th>Owner</th><th>Due</th><th>Status</th></tr></thead><tbody>{actions.map((action) => <tr key={action.id}><td>{action.title}</td><td>{action.owner_name || "Not assigned"}</td><td className={styles.nowrap}>{formatDate(action.due_date)}</td><td><DeliveryPill status={action.status} /></td></tr>)}</tbody></table></div>;
 }
 
 function WorkspaceSkeleton() { return <div className={styles.skeleton} aria-label="Loading project"><span /><span /><span /></div>; }
 function Ledger({ label, value, detail }: { label: string; value: string; detail: string }) { return <div><span>{label}</span><strong>{value}</strong><small>{detail}</small></div>; }
 function Fact({ label, value }: { label: string; value: string | null | undefined }) { return <div><dt>{label}</dt><dd>{value || "Not provided"}</dd></div>; }
 function ReadOnly({ label, value }: { label: string; value: string | null | undefined }) { return <div className={styles.readOnly}><span>{label}</span><p>{value || "Not provided"}</p></div>; }
-function SectionHeading({ icon: Icon, eyebrow, title, description }: { icon: typeof Target; eyebrow: string; title: string; description: string }) { return <header className={styles.sectionHeading}><Icon aria-hidden="true" /><div><p>{eyebrow}</p><h2>{title}</h2><span>{description}</span></div></header>; }
 function EmptyState({ icon: Icon, title, text }: { icon: typeof Target; title: string; text: string }) { return <div className={styles.empty}><Icon aria-hidden="true" /><h3>{title}</h3><p>{text}</p></div>; }
 function formatDate(value: string | null) { return value ? new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`)) : "Not recorded"; }
 function formatDateTime(value: string) { return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(value)); }
+function formatShortDate(value: string) { return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", timeZone: "UTC" }).format(new Date(`${value}T00:00:00Z`)); }
 function dateRange(start: string | null, end: string | null) { return start || end ? `${formatDate(start)} to ${formatDate(end)}` : "Not planned"; }
 function labelize(value: string) { return value.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
-function healthLabel(value: string) { return ({ not_set: "Health not assessed", on_track: "On track", at_risk: "At risk", blocked: "Blocked" } as Record<string, string>)[value] ?? labelize(value); }
 function initials(name: string) { return name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase()).join("") || "?"; }

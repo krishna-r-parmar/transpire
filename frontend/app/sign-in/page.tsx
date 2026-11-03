@@ -32,12 +32,7 @@ export default async function SignInPage({ params, searchParams }: SignInPagePro
         returnedWithSSOError={query.sso_error === "1"}
         selectingSSOWorkspace={query.sso_select === "1"}
       />
-      <EnterpriseFooter
-        journeyHref="/#movement"
-        platformHref="/#platform"
-        impactHref="/#impact"
-        topHref="#sign-in-top"
-      />
+      <EnterpriseFooter topHref="#sign-in-top" />
     </>
   );
 }
