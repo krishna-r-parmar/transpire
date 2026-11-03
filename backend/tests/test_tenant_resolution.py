@@ -64,3 +64,4 @@ def test_unscoped_tenant_api_is_rejected() -> None:
 
     assert response.status_code == 404
     assert "tenant_shortname" in response.json()["detail"]
+

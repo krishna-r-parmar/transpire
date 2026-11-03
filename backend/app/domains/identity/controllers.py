@@ -587,7 +587,51 @@ async def request_global_password_reset(
             generate_session_token()
             return
 
-        workspace = workspaces[0]
+        password_workspaces = [
+            workspace
+            for workspace in workspaces
+            if not await repository.tenant_requires_sso(session, workspace.tenant_id)
+        ]
+        if not password_workspaces:
+            # Every workspace signs in through Microsoft, so a reset link would be
+            # unusable. Point the user to SSO instead, keeping the response generic.
+            workspace = workspaces[0]
+            await apply_tenant_to_transaction(session, workspace.tenant_id)
+            session.add(
+                _authentication_event(
+                    tenant_id=workspace.tenant_id,
+                    user_id=user.id,
+                    event_type="password_reset_requested",
+                    outcome="sso_required",
+                    client=client,
+                )
+            )
+            enqueue_email(
+                session,
+                EmailMessage(
+                    tenant_id=workspace.tenant_id,
+                    recipient=user.email,
+                    template_key="account_security",
+                    subject="Sign in to TRANSPIRE with Microsoft",
+                    template_data={
+                        "recipient_name": user.display_name,
+                        "tenant_name": workspace.name,
+                        "event_description": (
+                            "A password reset was requested, but your organisation signs in "
+                            "with Microsoft SSO. Use your work account instead"
+                        ),
+                        "event_time": now.strftime("%d %B %Y at %H:%M UTC"),
+                        "action_url": tenant_frontend_url(
+                            settings, workspace.slug, "/sign-in"
+                        ),
+                        "action_label": "Sign in with Microsoft",
+                    },
+                ),
+                settings,
+            )
+            return
+
+        workspace = password_workspaces[0]
         await apply_tenant_to_transaction(session, workspace.tenant_id)
         session.add(
             _authentication_event(

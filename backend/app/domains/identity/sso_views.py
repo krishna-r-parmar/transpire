@@ -3,11 +3,17 @@ from typing import Annotated
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from fastapi.responses import RedirectResponse
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings, get_settings
 from app.core.database import get_session
-from app.core.tenant_resolution import ResolvedTenant, get_resolved_tenant
+from app.core.tenant_resolution import (
+    ResolvedTenant,
+    get_resolved_tenant,
+    normalize_tenant_slug,
+    resolve_tenant,
+)
 from app.domains.identity.controllers import ClientContext, IssuedSession
 from app.domains.identity.dependencies import SSORecoveryIdentity, TenantAdminIdentity
 from app.domains.identity.schemas import (
@@ -34,6 +40,7 @@ from app.domains.identity.sso import (
     redeem_recovery,
     repair_sso_configuration,
     select_sso_workspace,
+    tenant_slug_from_state,
 )
 
 router = APIRouter(tags=["Microsoft SSO"])
@@ -94,6 +101,9 @@ async def global_sso_callback(
     code: str = Query(min_length=1),
     state_token: str = Query(alias="state", min_length=32),
 ) -> RedirectResponse:
+    if tenant_slug_from_state(state_token) is not None:
+        # Tenant sign-ins share this redirect URI; their state names the tenant.
+        return await sso_callback(request, settings, session, code, state_token)
     try:
         outcome = await complete_global_sso(
             code=code,
@@ -195,12 +205,17 @@ async def start_sso_sign_in(
 @router.get("/auth/sso/callback")
 async def sso_callback(
     request: Request,
-    tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,
     code: str = Query(min_length=1),
     state_token: str = Query(alias="state", min_length=32),
 ) -> RedirectResponse:
+    tenant = await _callback_tenant(request, state_token)
+    if tenant is None:
+        return RedirectResponse(
+            f"{settings.public_app_url.rstrip('/')}/sign-in?sso_error=1",
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
     try:
         outcome = await complete_sso(
             code=code,
@@ -219,6 +234,19 @@ async def sso_callback(
     if outcome.issued_session:
         _set_session(response, outcome.issued_session, settings)
     return response
+
+
+async def _callback_tenant(request: Request, state_token: str) -> ResolvedTenant | None:
+    slug = tenant_slug_from_state(state_token)
+    if slug is None:
+        # Sign-ins started before the shared redirect URI still arrive on /t/{slug}/.
+        route_tenant = getattr(request.state, "tenant", None)
+        return route_tenant if isinstance(route_tenant, ResolvedTenant) else None
+    try:
+        tenant = await resolve_tenant(normalize_tenant_slug(slug))
+    except SQLAlchemyError:
+        return None
+    return tenant if tenant is not None and tenant.status == "active" else None
 
 
 @router.get("/admin/sso", response_model=SSOConfigurationResult)

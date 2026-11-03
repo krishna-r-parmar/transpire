@@ -34,7 +34,7 @@ Authentication routes:
 - `POST /api/v1/auth/sign-in`
 - `POST /api/v1/auth/select-workspace`
 - `GET /api/v1/auth/sso/global/start` — begin Microsoft sign-in from the shared sign-in page
-- `GET /api/v1/auth/sso/global/callback` — discover eligible SSO workspaces from the verified Entra identity
+- `GET /api/v1/auth/sso/global/callback` — the single Entra redirect URI: discovers eligible SSO workspaces from the verified Entra identity, or completes a tenant sign-in when the OIDC state names a tenant
 - `GET|POST /api/v1/auth/sso/global/workspaces` — securely choose when that identity has several workspaces
 - `GET /api/v1/auth/session`
 - `POST /api/v1/auth/logout`
@@ -42,7 +42,6 @@ Authentication routes:
 - `POST /api/v1/auth/password-reset/complete`
 - `GET /api/v1/t/{tenant_shortname}/auth/sso/status` — public tenant sign-in policy
 - `GET /api/v1/t/{tenant_shortname}/auth/sso/start` — begin Microsoft Entra OIDC
-- `GET /api/v1/t/{tenant_shortname}/auth/sso/callback` — validate Entra and issue the existing tenant session
 - `GET /api/v1/t/{tenant_shortname}/auth/workspaces` — active workspaces for the signed-in user
 - `POST /api/v1/auth/invitations/inspect`
 - `POST /api/v1/auth/invitations/accept`
@@ -90,7 +89,7 @@ Tenant provisioning creates a unique shortname, system roles, a published `Demo 
 
 Configure `ENTRA_CLIENT_ID`, `ENTRA_CLIENT_SECRET`, and the externally reachable `PUBLIC_API_URL`. A tenant administrator then supplies the organisation's Entra directory ID in **Admin → Configuration → Authentication**, completes a real administrator validation, and performs the guarded cutover. Activation changes authentication routing only: existing users, memberships, roles, sessions, and owned business records remain in place. Existing sessions expire normally, while new sessions use Entra. Each active member receives one idempotent `sso_migration` email for that activation.
 
-Register both the shared callback (`{PUBLIC_API_URL}/auth/sso/global/callback`) and each tenant administration callback (`{PUBLIC_API_URL}/t/{tenant_shortname}/auth/sso/callback`) as **Web** redirect URIs in Entra. Locally, the shared callback is `http://localhost:8000/api/v1/auth/sso/global/callback`. The shared entry point discovers the workspace from Entra's verified directory and object identity; it enters a single matching workspace immediately and presents a workspace choice only when several active SSO workspaces match.
+Register one **Web** redirect URI in Entra: `{PUBLIC_API_URL}/auth/sso/global/callback` (locally `http://localhost:8000/api/v1/auth/sso/global/callback`). Shared sign-in, tenant sign-in, and administrator validation all return there; tenant flows carry the tenant in the OIDC state, so adding an SSO tenant needs no Entra change. The shared entry point discovers the workspace from Entra's verified directory and object identity; it enters a single matching workspace immediately and presents a workspace choice only when several active SSO workspaces match.
 
 Platform administrators can issue a short-lived, single-use recovery link to an active tenant administrator. Redeeming it creates an `sso_recovery` scoped session, which normal application dependencies reject; it can only replace the Entra directory configuration and require validation again.
 
