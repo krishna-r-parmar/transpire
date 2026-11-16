@@ -481,7 +481,7 @@ async def complete_sso(
             config.validated_at = now
             config.validated_by_user_id = user.id
             return SSOCallbackOutcome(
-                redirect_url=tenant_frontend_url(settings, tenant.slug, "/admin/configuration?sso=validated")
+                redirect_url=tenant_frontend_url(settings, tenant.slug, "/admin/sign-in?sso=validated")
             )
         if config is None or config.status != "active":
             raise SSOAuthenticationError("Microsoft SSO is not active for this organisation.")

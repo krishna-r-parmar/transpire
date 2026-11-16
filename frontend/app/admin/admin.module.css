@@ -7,6 +7,11 @@
 .notices { margin-bottom: 1rem; }
 .grid { display: grid; align-items: start; gap: 1.5rem; }
 .grid > section:nth-child(n) { min-width: 0; margin-top: 0; }
+/* Full-width sections stacked top to bottom, e.g. provisioning above the tenant register. */
+.stacked { display: grid; gap: 1.5rem; }
+.stacked > section:nth-child(n) { min-width: 0; margin-top: 0; }
+.formRow { display: grid; align-items: start; gap: 1rem 1.25rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
+.formActions { display: flex; justify-content: flex-end; grid-column: 1 / -1; }
 
 /* Card toolbars and forms */
 .cardTools { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: .75rem 1rem; border-bottom: 1px solid var(--line); padding: 1rem 1.25rem; }

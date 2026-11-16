@@ -46,7 +46,7 @@ export function IdeaBank() {
   const kaizenCount = ideas.filter((idea) => idea.idea_type === "kaizen").length;
   const projectCount = ideas.filter((idea) => idea.idea_type === "project").length;
   const approvedCount = ideas.filter((idea) => ["approved", "charter_in_progress", "charter_submitted"].includes(idea.status)).length;
-  return <AdminShell session={session} active="ideas" eyebrow="Global Idea Bank" title="See what the organisation is improving." description="Shared detail follows the visibility policy set by your Tenant Administrator. Search the collective signal without exposing restricted information." actions={<Link className={styles.primaryAction} href="/ideas/new/v2"><Plus size={16} />Submit an idea</Link>}>
+  return <AdminShell session={session} active="ideas" eyebrow="Workspace" title="Idea Bank" description="Shared detail follows the visibility policy set by your Tenant Administrator. Search the collective signal without exposing restricted information." actions={<Link className={styles.primaryAction} href="/ideas/new/v2"><Plus size={16} />Submit an idea</Link>}>
     {!loadingIdeas && !error ? <SummaryStrip label="Idea Bank summary" items={[
       { icon: <Lightbulb size={18} />, value: ideas.length, label: "Shared ideas", note: "Visible to you under the current policy" },
       { icon: <Sparkles size={18} />, value: kaizenCount, label: "Kaizen ideas", note: "Small, local improvements" },

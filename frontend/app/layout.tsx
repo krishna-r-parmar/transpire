@@ -21,7 +21,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
         <script
           dangerouslySetInnerHTML={{
             __html:
-              "try{var t=localStorage.getItem('transpire-theme');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}",
+              "try{var t=localStorage.getItem('transpire-theme');document.documentElement.dataset.theme=t==='dark'?'dark':'light'}catch(e){document.documentElement.dataset.theme='light'}try{document.documentElement.dataset.sidebar=localStorage.getItem('transpire-sidebar')==='collapsed'?'collapsed':'expanded'}catch(e){document.documentElement.dataset.sidebar='expanded'}",
           }}
         />
       </head>

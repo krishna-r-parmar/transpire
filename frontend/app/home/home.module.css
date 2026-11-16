@@ -1,10 +1,7 @@
-.page { --blue: oklch(59.157% .14157 242.451); --blue-deep: oklch(45% .12 242); --red: oklch(62.236% .22144 23.472); --ink: oklch(23% .045 253); --muted: oklch(48% .025 248); --paper: oklch(98.5% .006 240); --panel: oklch(95.5% .012 242); --line: oklch(86% .02 242); min-height: 100svh; background: var(--paper); color: var(--ink); }
-.header { position: sticky; z-index: 10; top: 0; display: grid; min-height: 5.75rem; align-items: center; gap: clamp(.75rem, 2vw, 2rem); border-bottom: 1px solid oklch(77% .045 242); padding: 0 clamp(1.25rem, 3vw, 2.6rem); background: oklch(95.5% .022 242); box-shadow: 0 .35rem 1rem oklch(28% .055 250 / .08); grid-template-columns: auto minmax(0, 1fr) auto; }
-.header > a { width: 11.75rem; } .header img { width: 100%; height: auto; }
-.main { width: 100%; max-width: 92rem; margin: 0 auto; padding: clamp(2.5rem, 5vw, 4.5rem) clamp(1.25rem, 5vw, 5rem) 6rem; }
+.page { --blue: oklch(59.157% .14157 242.451); --blue-deep: oklch(45% .12 242); --red: oklch(62.236% .22144 23.472); --ink: oklch(23% .045 253); --muted: oklch(48% .025 248); --paper: oklch(98.5% .006 240); --panel: oklch(95.5% .012 242); --line: oklch(86% .02 242); color: var(--ink); }
 .welcome { display: flex; align-items: end; justify-content: space-between; gap: 2rem; } .welcome > div { max-width: 48rem; }
 .eyebrow, .sectionHeader p { margin: 0 0 .7rem; color: var(--blue-deep); font-size: .68rem; font-weight: 820; letter-spacing: .1em; text-transform: uppercase; }
-.welcome h1 { margin: 0; font-size: clamp(2.2rem, 4vw, 3.8rem); line-height: 1.02; letter-spacing: -.055em; }
+.welcome h1 { margin: 0; font-size: clamp(1.8rem, 3vw, 2.6rem); line-height: 1.02; letter-spacing: -.055em; }
 .welcome > div > p:last-child { max-width: 67ch; margin: 1rem 0 0; color: var(--muted); font-size: .9rem; line-height: 1.65; }
 .primaryAction { display: inline-flex; min-height: 2.85rem; flex: 0 0 auto; align-items: center; gap: .55rem; border-radius: .25rem; padding: .7rem 1rem; background: var(--blue); color: oklch(98% .006 240); font-size: .76rem; font-weight: 780; text-decoration: none; }
 .summaryStrip { display: grid; margin-top: 2.75rem; border-block: 1px solid var(--line); grid-template-columns: repeat(4, 1fr); }

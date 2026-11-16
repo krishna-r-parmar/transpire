@@ -1,17 +1,15 @@
 "use client";
 
-import { Bell } from "lucide-react";
-import { TenantLink as Link } from "@/components/app/tenant-link";
 import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
-import styles from "./approval-notifications-link.module.css";
 
 type Summary = {
   ideas: Array<{ status: string }>;
   approval_items: Array<{ stage_id: string }>;
 };
 
-export function ApprovalNotificationsLink({ active }: { active: boolean }) {
+/** Count of approval items plus own ideas needing correction, refreshed every minute. */
+export function useApprovalCount() {
   const [count, setCount] = useState(0);
 
   useEffect(() => {
@@ -32,8 +30,5 @@ export function ApprovalNotificationsLink({ active }: { active: boolean }) {
     return () => window.clearInterval(timer);
   }, []);
 
-  return <Link className={styles.link} href="/notifications" data-active={active} aria-label={count ? `Approval notifications, ${count} requiring attention` : "Approval notifications"}>
-    <Bell aria-hidden="true" size={18} />
-    {count ? <span>{count > 99 ? "99+" : count}</span> : null}
-  </Link>;
+  return count;
 }

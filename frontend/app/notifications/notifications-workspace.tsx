@@ -39,7 +39,7 @@ export function NotificationsWorkspace() {
   const dueSoon = approvalItems.filter((item) => item.due_at && new Date(item.due_at).getTime() >= now && new Date(item.due_at).getTime() - now < 7 * 864e5).length;
   const corrections = ownJourneys.filter((idea) => idea.status === "needs_correction").length;
 
-  return <AdminShell session={session} active="notifications" eyebrow="Approval notifications" title="Keep every review moving." description="Act on decisions assigned to you and follow ideas currently moving through approval.">
+  return <AdminShell session={session} active="notifications" eyebrow="Workspace" title="Approvals" description="Act on decisions assigned to you and follow ideas currently moving through approval.">
     {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
     {summary ? <><SummaryStrip label="Approval summary" items={[
       { icon: <ClipboardCheck size={18} />, value: approvalItems.length, label: "Assigned to you", note: approvalItems.length ? `${dueSoon} due in the next 7 days` : "Your queue is clear", tone: approvalItems.length ? "warning" : undefined },

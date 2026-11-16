@@ -40,7 +40,7 @@ export function SSORecovery({ token }: { token: string }) {
         setError(payload?.detail ?? "The SSO configuration could not be repaired.");
         return;
       }
-      router.replace("/admin/configuration?sso=recovery");
+      router.replace("/admin/sign-in");
     } catch { setError("Recovery is temporarily unavailable."); }
     finally { setBusy(false); }
   };

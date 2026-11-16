@@ -280,8 +280,8 @@ export function TenantConsole() {
     <AdminShell
       session={session}
       active="tenants"
-      eyebrow="Super Admin Console"
-      title="Tenant control, without tenant data access."
+      eyebrow="Platform administration"
+      title="Tenants"
       description="Provision organisational workspaces, manage their lifecycle, and invite the first accountable administrator."
     >
       <SummaryStrip label="Tenant summary" items={[
@@ -294,7 +294,17 @@ export function TenantConsole() {
         {message ? <DismissibleNotice onDismiss={() => setMessage("")}>{message}</DismissibleNotice> : null}
         {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
       </div> : null}
-      <div className={styles.grid}>
+      <div className={styles.stacked}>
+        <SectionCard icon={<Plus size={17} />} title="Provision a tenant" description="Creates a shortname-based workspace and queues its first administrator invitation." tinted>
+          <form className={styles.formRow} onSubmit={createTenant}>
+            <div className={styles.field}><label htmlFor="tenant-name">Organisation name</label><input id="tenant-name" name="name" required minLength={2} /></div>
+            <div className={styles.field}><label htmlFor="tenant-slug">Workspace shortname</label><input id="tenant-slug" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="example-industries" aria-describedby="tenant-slug-hint" /><small id="tenant-slug-hint">Used in /t/example-industries. It is independent of email domains.</small></div>
+            <div className={styles.field}><label htmlFor="tenant-admin-name">First administrator</label><input id="tenant-admin-name" name="admin_name" required /></div>
+            <div className={styles.field}><label htmlFor="tenant-admin-email">Administrator email</label><input id="tenant-admin-email" name="admin_email" type="email" required /></div>
+            <div className={styles.formActions}><button className={styles.primary} type="submit" disabled={submitting}><Plus aria-hidden="true" size={16} /> {submitting ? "Provisioning" : "Create tenant"}</button></div>
+          </form>
+        </SectionCard>
+
         <SectionCard icon={<Building2 size={17} />} title="Platform tenants" description={`${tenants.length} workspace${tenants.length === 1 ? "" : "s"} provisioned. Expand an organisation to manage member access.`} flush>
           <div className={styles.cardTools}><SearchField id="tenant-search" label="Search platform tenants" value={searchQuery} onChange={setSearchQuery} placeholder="Search organisation, shortname, status, or admin" resultCount={visibleTenants.length} /></div>
           {tenants.length ? (
@@ -326,16 +336,6 @@ export function TenantConsole() {
               {visibleTenants.length === 0 ? <p className={styles.noResults}>No tenants match “{searchQuery}”. Try an organisation, shortname, status, or administrator email.</p> : null}
             </div>
           ) : <div className={styles.empty}><Building2 aria-hidden="true" size={24} /><p>No tenants have been provisioned yet.</p></div>}
-        </SectionCard>
-
-        <SectionCard icon={<Plus size={17} />} title="Provision a tenant" description="Creates a shortname-based workspace and queues its first administrator invitation." tinted>
-          <form className={styles.form} onSubmit={createTenant}>
-            <div className={styles.field}><label htmlFor="tenant-name">Organisation name</label><input id="tenant-name" name="name" required minLength={2} /></div>
-            <div className={styles.field}><label htmlFor="tenant-slug">Workspace shortname</label><input id="tenant-slug" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*" placeholder="example-industries" aria-describedby="tenant-slug-hint" /><small id="tenant-slug-hint">Used in /t/example-industries. It is independent of email domains.</small></div>
-            <div className={styles.field}><label htmlFor="tenant-admin-name">First administrator</label><input id="tenant-admin-name" name="admin_name" required /></div>
-            <div className={styles.field}><label htmlFor="tenant-admin-email">Administrator email</label><input id="tenant-admin-email" name="admin_email" type="email" required /></div>
-            <button className={styles.primary} type="submit" disabled={submitting}><Plus aria-hidden="true" size={16} /> {submitting ? "Provisioning" : "Create tenant"}</button>
-          </form>
         </SectionCard>
       </div>
       <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title ?? "Confirm action"} description={confirmation?.description ?? ""} confirmLabel={confirmation?.confirmLabel ?? "Confirm"} busyLabel={confirmation?.busyLabel} confirmationText={confirmation?.confirmationText} busy={confirming} onClose={() => setConfirmation(null)} onConfirm={confirmAction} />

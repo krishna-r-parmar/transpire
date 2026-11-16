@@ -1,12 +1,15 @@
-import type { Metadata } from "next";
-import { ConfigurationConsole } from "./configuration-console";
+import { redirect } from "next/navigation";
+import { tenantPath } from "@/lib/tenant-routing";
 
-export const metadata: Metadata = {
-  title: "Configuration | TRANSPIRE Administration",
-  description: "Configure organisation structures, idea classification, and approval contracts.",
+type Props = {
+  params?: Promise<{ tenantSlug?: string }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 };
 
-export default async function ConfigurationPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
-  const query = await searchParams;
-  return <ConfigurationConsole returnedFromSSOValidation={query.sso === "validated"} />;
+/** Configuration is now split into separate administration pages; keep old links and SSO callbacks working. */
+export default async function ConfigurationPage({ params, searchParams }: Props) {
+  const tenantSlug = (await params)?.tenantSlug;
+  const sso = (await searchParams).sso;
+  const target = sso === "validated" ? "/admin/sign-in?sso=validated" : sso ? "/admin/sign-in" : "/admin/sites";
+  redirect(tenantSlug ? tenantPath(tenantSlug, target) : target);
 }

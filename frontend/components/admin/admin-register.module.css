@@ -1,0 +1,63 @@
+/* Administration registers: toolbar, dense table, and the add/edit side panel. Tokens come from AdminShell (.app). */
+.toolbar { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: .75rem 1rem; padding: .9rem 1rem; border-bottom: 1px solid var(--line); }
+.toolbar > [role="search"] { flex: 1 1 18rem; max-width: 26rem; }
+.toolbarFilters { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+.toolbarFilters > div:not([role="group"]) { min-width: 12rem; }
+
+.surface { overflow: hidden; border: 1px solid var(--line); border-radius: .5rem; background: var(--tp-surface); }
+.notices { display: grid; gap: .5rem; margin-bottom: 1rem; }
+
+.segmented { display: inline-flex; border: 1px solid var(--line); border-radius: .4rem; padding: 2px; background: var(--panel); }
+.segmented button { display: inline-flex; min-height: 2.25rem; cursor: pointer; align-items: center; gap: .4rem; border: 0; border-radius: .3rem; padding: 0 .75rem; background: transparent; color: var(--muted); font: inherit; font-size: .85rem; font-weight: 650; }
+.segmented button span { color: inherit; font-size: .75rem; font-variant-numeric: tabular-nums; opacity: .8; }
+.segmented button[aria-pressed="true"] { background: var(--tp-surface); box-shadow: 0 1px 2px oklch(25% .04 250 / .14); color: var(--ink); }
+
+.table { width: 100%; min-width: 40rem; border-collapse: collapse; font-size: .9rem; }
+.table th { padding: .6rem 1rem; background: var(--panel); color: var(--muted); font-size: .72rem; font-weight: 750; letter-spacing: .06em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.table td { padding: .7rem 1rem; border-top: 1px solid var(--line); vertical-align: middle; }
+.table tbody tr:hover td { background: var(--paper); }
+.table tr[data-inactive="true"] td:first-child strong { color: var(--muted); }
+.table .numeric { font-variant-numeric: tabular-nums; }
+.tableWrap { overflow-x: auto; }
+.code { display: inline-block; border-radius: .25rem; padding: .1rem .4rem; background: var(--panel); color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .78rem; }
+.scope { max-width: 22rem; color: var(--muted); font-size: .85rem; line-height: 1.4; }
+.actions { display: flex; justify-content: flex-end; gap: .25rem; white-space: nowrap; }
+.actions button { display: inline-flex; min-height: 2.25rem; cursor: pointer; align-items: center; gap: .35rem; border: 0; border-radius: .3rem; padding: 0 .6rem; background: transparent; color: var(--blue-deep); font: inherit; font-size: .85rem; font-weight: 650; }
+.actions button:hover:not(:disabled) { background: var(--tp-blue-soft); }
+.actions button[data-tone="danger"] { color: var(--tp-danger); }
+.actions button[data-tone="danger"]:hover:not(:disabled) { background: var(--tp-danger-soft); }
+.actions button:disabled { cursor: not-allowed; opacity: .5; }
+.actions button:focus-visible, .segmented button:focus-visible, .panelClose:focus-visible { outline: 2px solid var(--blue); outline-offset: 1px; }
+.empty { display: grid; justify-items: center; gap: .6rem; padding: 3rem 1.25rem; color: var(--muted); font-size: .9rem; text-align: center; }
+.empty p { max-width: 46ch; margin: 0; line-height: 1.5; }
+.footerNote { margin: 0; padding: .7rem 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .8rem; }
+
+.panelLayer { position: fixed; z-index: 80; inset: 0; }
+.panelBackdrop { position: absolute; inset: 0; border: 0; background: oklch(18% .04 254 / .35); }
+.panel { position: absolute; top: 0; right: 0; bottom: 0; display: flex; width: min(30rem, 100vw); flex-direction: column; background: var(--tp-surface); box-shadow: -20px 0 60px oklch(18% .05 254 / .2); animation: panelIn 220ms cubic-bezier(.16, 1, .3, 1) both; }
+.panel > header { display: flex; align-items: start; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.25rem 1rem; border-bottom: 1px solid var(--line); }
+.panel h2 { margin: 0; font-size: 1.15rem; letter-spacing: -.015em; }
+.panel header p { margin: .3rem 0 0; color: var(--muted); font-size: .88rem; line-height: 1.45; }
+.panelClose { display: inline-grid; width: 2.25rem; height: 2.25rem; flex: 0 0 auto; cursor: pointer; place-items: center; border: 0; border-radius: .4rem; background: transparent; color: var(--muted); }
+.panelClose:hover { background: var(--panel); color: var(--ink); }
+.panelBody { flex: 1 1 auto; overflow-y: auto; padding: 1.25rem; padding-bottom: max(1.25rem, env(safe-area-inset-bottom)); }
+.panelForm { display: grid; gap: 1.1rem; }
+.panelFooter { display: flex; justify-content: flex-end; gap: .5rem; padding-top: .5rem; }
+.secondary { display: inline-flex; min-height: 2.75rem; cursor: pointer; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: .25rem; padding: 0 1rem; background: var(--tp-surface); color: var(--ink); font: inherit; font-size: .9rem; font-weight: 650; }
+.readonly { display: grid; gap: .3rem; }
+.readonly span { font-size: var(--tp-control-label); font-weight: 760; }
+.readonly code { width: fit-content; }
+.siteScope { display: grid; gap: .5rem; margin: 0; border: 0; padding: 0; }
+.siteScope legend { margin-bottom: .45rem; font-size: var(--tp-control-label); font-weight: 760; }
+.siteScope label { display: flex; min-height: 2.6rem; cursor: pointer; align-items: center; gap: .6rem; border: 1px solid var(--line); border-radius: .3rem; padding: 0 .75rem; font-size: .9rem; }
+.siteScope label[data-selected="true"] { border-color: var(--blue); background: var(--tp-blue-soft); }
+.siteScope input { width: 1rem; height: 1rem; accent-color: var(--blue); }
+.childList { display: grid; margin: 0 0 1.25rem; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: .4rem; }
+.childList li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding: .55rem .75rem; }
+.childList li + li { border-top: 1px solid var(--line); }
+.childList li[data-inactive="true"] strong { color: var(--muted); }
+.childList strong { display: block; font-size: .9rem; }
+.subheading { margin: 0 0 .6rem; font-size: .8rem; font-weight: 750; letter-spacing: .05em; color: var(--muted); text-transform: uppercase; }
+
+@keyframes panelIn { from { transform: translateX(2rem); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .panel { animation: none; } }

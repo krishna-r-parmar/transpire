@@ -1,53 +1,50 @@
 "use client";
 
-import Image from "next/image";
-import { TenantLink as Link } from "@/components/app/tenant-link";
 import type { ReactNode } from "react";
-import { AppMenu } from "@/components/app/app-menu";
-import { DesktopNavigation } from "@/components/app/desktop-navigation";
+import { AppSidebar, type AppRoute } from "@/components/app/app-sidebar";
+import { adminBreadcrumb, isAdminRoute } from "./admin-nav";
 import type { SessionIdentity } from "@/lib/api";
 import styles from "./admin-shell.module.css";
 
-type AdminShellProps = {
+type AppFrameProps = {
   session: SessionIdentity;
-  active: "tenants" | "people" | "configuration" | "submit" | "ideas" | "projects" | "profile" | "notifications" | "audit";
-  eyebrow: string;
-  title: string;
-  description: string;
-  actions?: ReactNode;
+  active: AppRoute;
   children: ReactNode;
 };
 
-export function AdminShell({
-  session,
-  active,
-  eyebrow,
-  title,
-  description,
-  actions,
-  children,
-}: AdminShellProps) {
+/** Sidebar plus a single main column. Pages that compose their own heading (Home) use this directly. */
+export function AppFrame({ session, active, children }: AppFrameProps) {
   return (
-    <div className={styles.app}>
-      <header className={styles.topbar}>
-        <Link href="/home" aria-label="TRANSPIRE home">
-          <Image src="/brand/transpire-logo.png" alt="TRANSPIRE" width={1400} height={371} priority />
-        </Link>
-        <DesktopNavigation session={session} active={active} />
-        <AppMenu session={session} active={active} />
-      </header>
-
-      <main className={styles.main}>
-        <header className={styles.pageHeader}>
-          <div>
-            <p>{eyebrow}</p>
-            <h1>{title}</h1>
-            <span>{description}</span>
-          </div>
-          {actions ? <div className={styles.pageActions}>{actions}</div> : null}
-        </header>
-        {children}
-      </main>
+    <div className={styles.app} data-area={isAdminRoute(active) ? "admin" : "workspace"}>
+      <AppSidebar session={session} active={active} />
+      <main className={styles.main} id="main-content">{children}</main>
     </div>
+  );
+}
+
+type AdminShellProps = AppFrameProps & {
+  /** Area label above the title. Administration pages show their breadcrumb instead. */
+  eyebrow?: string;
+  title: string;
+  description: string;
+  actions?: ReactNode;
+};
+
+/** Focused page: one heading, one line of purpose, and the page's own actions. Global navigation lives in the sidebar. */
+export function AdminShell({ session, active, eyebrow, title, description, actions, children }: AdminShellProps) {
+  return (
+    <AppFrame session={session} active={active}>
+      <header className={styles.pageHeader}>
+        <div>
+          {isAdminRoute(active)
+            ? <nav className={styles.breadcrumb} aria-label="Breadcrumb"><ol>{adminBreadcrumb(active).map((crumb) => <li key={crumb}>{crumb}</li>)}</ol></nav>
+            : eyebrow ? <p>{eyebrow}</p> : null}
+          <h1>{title}</h1>
+          <span>{description}</span>
+        </div>
+        {actions ? <div className={styles.pageActions}>{actions}</div> : null}
+      </header>
+      {children}
+    </AppFrame>
   );
 }

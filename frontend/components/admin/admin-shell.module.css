@@ -9,17 +9,25 @@
   --tp-control-label: .875rem; --tp-control-value: .9375rem; --tp-control-hint: .8125rem; --tp-control-chip: .75rem;
   min-height: 100svh; background: var(--paper); color: var(--ink); font-size: var(--tp-text-md);
 }
-.topbar { position: sticky; z-index: 10; top: 0; display: grid; min-height: 5.75rem; align-items: center; gap: clamp(.75rem, 2vw, 2rem); border-bottom: 1px solid oklch(77% .045 242); padding: 0 clamp(1.25rem, 3vw, 2.6rem); background: oklch(95.5% .022 242); box-shadow: 0 .35rem 1rem oklch(28% .055 250 / .08); grid-area: topbar; grid-template-columns: auto minmax(0, 1fr) auto; }
-.topbar > a { width: 11.75rem; }
-.topbar img { width: 100%; height: auto; }
-.main { width: 100%; max-width: 90rem; margin: 0 auto; padding: clamp(2rem, 4vw, 3.25rem) clamp(1.25rem, 4vw, 3.5rem) 6rem; }
-.pageHeader { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1.25rem 2rem; margin-bottom: 2rem; }
-.pageHeader > div:first-child { max-width: 50rem; }
-.pageHeader > div:first-child > p { margin: 0 0 .6rem; color: var(--blue-deep); font-size: .75rem; font-weight: 820; letter-spacing: .1em; text-transform: uppercase; }
-.pageHeader > div:first-child > h1 { margin: 0; font-size: clamp(2rem, 3.4vw, 2.5rem); letter-spacing: -.045em; line-height: 1.05; }
-.pageHeader > div:first-child > span { display: block; max-width: 62ch; margin-top: .85rem; color: var(--muted); font-size: 1rem; line-height: 1.6; }
+.main { width: 100%; min-width: 0; max-width: 84rem; margin: 0 auto; padding: clamp(1.5rem, 3vw, 2.5rem) clamp(1.25rem, 3.5vw, 3rem) 5rem; }
+/* Focused header: what this page is for and its own actions, nothing global. */
+.pageHeader { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 1rem 2rem; margin-bottom: 1.75rem; padding-bottom: 1.25rem; border-bottom: 1px solid var(--line); }
+.pageHeader > div:first-child { min-width: 0; max-width: 46rem; }
+.pageHeader > div:first-child > p { margin: 0 0 .4rem; color: var(--blue-deep); font-size: .75rem; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
+.pageHeader > div:first-child > h1 { margin: 0; font-size: clamp(1.6rem, 2.6vw, 2.1rem); letter-spacing: -.035em; line-height: 1.1; text-wrap: balance; }
+.pageHeader > div:first-child > span { display: block; max-width: 62ch; margin-top: .55rem; color: var(--muted); font-size: .95rem; line-height: 1.55; }
+.breadcrumb ol { display: flex; flex-wrap: wrap; gap: .35rem; margin: 0 0 .5rem; padding: 0; list-style: none; color: var(--muted); font-size: .8rem; font-weight: 600; }
+.breadcrumb li + li::before { margin-right: .35rem; color: oklch(70% .02 248); content: "/"; }
+.breadcrumb li:last-child { color: var(--blue-deep); }
+/* Administration reads as a separate, denser console. */
+.app[data-area="admin"] { --paper: oklch(97.2% .006 250); }
+.app[data-area="admin"] .main { max-width: 76rem; }
+.app[data-area="admin"] .pageHeader { margin-bottom: 1.25rem; padding-bottom: 1rem; }
+.app[data-area="admin"] .pageHeader > div:first-child > h1 { font-size: clamp(1.45rem, 2vw, 1.75rem); letter-spacing: -.025em; }
+.app[data-area="admin"] .pageHeader > div:first-child > span { font-size: .9rem; }
 .pageActions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
 
-@media (max-width: 48rem) {
-  .main { padding-top: 2rem; }
+@media (min-width: 64rem) {
+  .app { display: grid; align-items: start; grid-template-columns: auto minmax(0, 1fr); }
 }
+

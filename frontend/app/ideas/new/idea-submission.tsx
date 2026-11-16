@@ -391,7 +391,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
         session={session}
         active="submit"
         eyebrow={draft?.status === "needs_correction" ? "Idea resubmitted" : "Idea submitted"}
-        title={draft?.status === "needs_correction" ? "Your correction is back in review." : "Your observation is now in motion."}
+        title={draft?.status === "needs_correction" ? "Correction resubmitted" : "Idea submitted"}
         description={`${submitted.reference} has been ${draft?.status === "needs_correction" ? "returned to its captured approval route" : "recorded against the published approval contract"}.`}
       >
         <section className={styles.success}>
@@ -421,7 +421,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
       session={session}
       active="submit"
       eyebrow={draft?.status === "needs_correction" ? "Correction requested" : draft ? "Draft idea" : "Idea submission"}
-      title={draft?.status === "needs_correction" ? "Address the feedback and return the idea to review." : draft ? `Continue ${draft.reference}` : "Turn something worth noticing into action."}
+      title={draft?.status === "needs_correction" ? `Correct ${draft.reference}` : draft ? `Continue ${draft.reference}` : "Submit an idea"}
       description={draft?.status === "needs_correction" ? "Update the submitted case with the requested clarification. The original approval history remains unchanged." : "Build a clear improvement case with the context, evidence, and expected value reviewers need to act confidently."}
     >
       {draft?.status === "needs_correction" ? <section className={styles.correctionBanner}><RotateCcw size={20} /><div><p>Approver feedback</p><h2>Correction required before approval can continue</h2><span>{correctionReason || "Review the approval timeline for the requested correction, update the idea, and resubmit it."}</span></div><Link href={`/ideas/${draft.id}?section=approval`}>View approval history</Link></section> : null}

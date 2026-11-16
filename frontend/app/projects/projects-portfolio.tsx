@@ -106,7 +106,7 @@ export function ProjectsPortfolio() {
     <AdminShell
       session={session}
       active="projects"
-      eyebrow="Execution portfolio"
+      eyebrow="Workspace"
       title="Projects"
       description="Track implementation, benefits and completion across the organisation."
     >

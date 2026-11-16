@@ -1,12 +1,10 @@
 "use client";
 
 import { ArrowRight, CalendarClock, CheckCircle2, CircleDot, ClipboardCheck, FileClock, FilePenLine, Lightbulb, Plus, RefreshCw, RotateCcw, Trash2 } from "lucide-react";
-import Image from "next/image";
 import { TenantLink as Link } from "@/components/app/tenant-link";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AppMenu } from "@/components/app/app-menu";
-import { DesktopNavigation } from "@/components/app/desktop-navigation";
+import { AppFrame } from "@/components/admin/admin-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DismissibleNotice } from "@/components/ui/dismissible-notice";
 import { apiRequest, type SessionIdentity } from "@/lib/api";
@@ -68,9 +66,8 @@ export function HomeWorkspace() {
   if (!session || !summary) return <main className={styles.loading} aria-label="Loading your TRANSPIRE workspace">{error ? <div className={styles.loadError} role="alert"><strong>We could not open your workspace.</strong><p>{error}</p><button type="button" onClick={() => void loadWorkspace()}><RefreshCw size={15} />Retry</button></div> : <><div className={styles.loadingMark} /><span>Preparing your improvement workspace</span></>}</main>;
 
   const firstName = session.user.display_name.split(" ")[0];
-  return <div className={styles.page}>
-    <header className={styles.header}><Link href="/home" aria-label="TRANSPIRE home"><Image src="/brand/transpire-logo.png" alt="TRANSPIRE" width={1400} height={371} priority /></Link><DesktopNavigation session={session} active="home" /><AppMenu session={session} active="home" /></header>
-    <main className={styles.main}>
+  return <AppFrame session={session} active="home">
+    <div className={styles.page}>
       {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
       <section className={styles.welcome} aria-labelledby="home-title"><div><p className={styles.eyebrow}>Your improvement workspace</p><h1 id="home-title">Good to have you here, {firstName}.</h1><p>Track the ideas you have contributed, respond to approval work assigned to you, and move approved ideas into implementation.</p></div><Link className={styles.primaryAction} href="/ideas/new/v2"><Plus size={17} />Submit an idea</Link></section>
       <section className={styles.summaryStrip} aria-label="Workspace summary"><div><Lightbulb size={18} /><span><strong>{summary.ideas.length}</strong>Ideas recorded</span></div><div><CircleDot size={18} /><span><strong>{activeIdeas}</strong>Active journeys</span></div><div><ClipboardCheck size={18} /><span><strong>{summary.approval_items.length}</strong>Awaiting your approval</span></div><div><CheckCircle2 size={18} /><span><strong>{approvedIdeas}</strong>Approved ideas</span></div></section>
@@ -84,9 +81,9 @@ export function HomeWorkspace() {
           {summary.ideas.some((idea) => idea.charter_available && idea.charter_status !== "submitted") ? <div className={styles.charterReminder}><FilePenLine size={18} /><div><strong>An approved idea is ready.</strong><p>Open its detail page to complete the project charter.</p></div></div> : null}
         </aside>
       </div>
-    </main>
+    </div>
     <ConfirmDialog open={Boolean(deleteTarget)} title="Delete this draft?" description={`${deleteTarget?.reference ?? "This draft"} will be permanently removed. Submitted ideas and correction requests cannot be deleted.`} confirmLabel="Delete draft" busyLabel="Deleting draft" onClose={() => setDeleteTarget(null)} onConfirm={() => void deleteDraft()} busy={deleting} />
-  </div>;
+  </AppFrame>;
 }
 
 function formatDate(value: string) { return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(new Date(value)); }

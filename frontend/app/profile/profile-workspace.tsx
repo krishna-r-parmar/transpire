@@ -96,7 +96,7 @@ export function ProfileWorkspace() {
 
   if (sessionLoading || !session || !profile || !settings) return <main className={styles.loading} aria-busy="true">Preparing your profile…</main>;
 
-  return <AdminShell session={session} active="profile" eyebrow="Personal workspace" title="Your TRANSPIRE profile" description="Keep your identity current, choose how TRANSPIRE communicates with you, and see the improvement habit you are building.">
+  return <AdminShell session={session} active="profile" eyebrow="Account" title="Profile" description="Keep your identity current, choose how TRANSPIRE communicates with you, and see the improvement habit you are building.">
     {notice ? <DismissibleNotice tone={notice.tone} onDismiss={() => setNotice(null)}>{notice.text}</DismissibleNotice> : null}
     <form className={styles.layout} onSubmit={(event) => void save(event)}>
       <div className={styles.stack}>
@@ -127,10 +127,10 @@ export function ProfileWorkspace() {
         <p className={styles.graphNote}><Check size={16} />Drafts are counted in your total, while the graph records completed submissions.</p>
       </SectionCard>
     </form>
-    <section className={styles.auditSection} id="audit-log" aria-labelledby="profile-audit-title">
+    {session.roles.includes("tenant_admin") ? null : <section className={styles.auditSection} id="audit-log" aria-labelledby="profile-audit-title">
       <header><span aria-hidden="true"><FileClock size={18} /></span><div><p>Accountability</p><h2 id="profile-audit-title">Audit log</h2><span>{session.roles.includes("tenant_admin") ? "Review governed activity across this organisation." : "Review events you performed or that affected your submissions."}</span></div></header>
       <AuditLog session={session} embedded />
-    </section>
+    </section>}
   </AdminShell>;
 }
 
