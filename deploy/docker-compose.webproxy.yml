@@ -1,0 +1,24 @@
+# Override for hosts where Nginx runs as a container on the external `webproxy`
+# Docker network (the QA EC2 host: license-tracker-nginx). deploy.sh adds this
+# file automatically when a `webproxy` network exists, so hosts with Nginx
+# installed natively keep using the loopback ports in docker-compose.prod.yml.
+#
+# The aliases must match the upstream hostnames in the Nginx vhost
+# (~/Lisence-Tracker/nginx/conf.d/transpire.conf on QA).
+
+services:
+  frontend:
+    networks:
+      transpire:
+      webproxy:
+        aliases: [transpire-frontend]
+
+  backend:
+    networks:
+      transpire:
+      webproxy:
+        aliases: [transpire-backend]
+
+networks:
+  webproxy:
+    external: true

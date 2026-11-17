@@ -14,9 +14,16 @@ ENV_FILE="$REPO_DIR/.env"
   exit 1
 }
 
+COMPOSE_FILES=(-f "$DEPLOY_DIR/docker-compose.prod.yml")
+# Hosts whose Nginx runs in a container on the shared `webproxy` network (QA)
+# also attach the app there; otherwise Nginx cannot reach it and returns 502.
+if docker network inspect webproxy >/dev/null 2>&1; then
+  COMPOSE_FILES+=(-f "$DEPLOY_DIR/docker-compose.webproxy.yml")
+fi
+
 compose() {
   docker compose --project-name transpire --project-directory "$DEPLOY_DIR" --env-file "$ENV_FILE" \
-    -f "$DEPLOY_DIR/docker-compose.prod.yml" "$@"
+    "${COMPOSE_FILES[@]}" "$@"
 }
 
 command -v docker >/dev/null
@@ -26,6 +33,7 @@ docker info >/dev/null
 compose config --quiet
 
 echo "==> Deploying $(git -C "$DEPLOY_DIR" log -1 --format='%h %s')"
+echo "==> Compose files: ${COMPOSE_FILES[*]}"
 
 echo "==> Building images"
 compose build --pull
