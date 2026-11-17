@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, CheckCircle2, CircleDot, Clock, Lock, Mail, MailPlus, RefreshCw, UserCheck, UserX, Users, type LucideIcon } from "lucide-react";
+import { Ban, BellRing, CheckCircle2, CircleDot, Clock, Lock, Mail, MailPlus, RefreshCw, UserCheck, UserX, Users, type LucideIcon } from "lucide-react";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
@@ -34,7 +34,13 @@ type Invitation = {
   last_sent_at: string;
 };
 
-type DirectoryFilter = "all" | "active" | "invited" | "inactive";
+type ReminderState = { last_signed_in_at: string | null; cooldown_until: string | null };
+type ReminderOverview = { cooldown_hours: number; candidates: (ReminderState & { membership_id: string })[] };
+type ReminderResult = { queued: string[]; skipped: { membership_id: string; reason: "cooldown" | "not_eligible" }[] };
+
+const reminderDate = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+
+type DirectoryFilter ="all" | "active" | "invited" | "inactive";
 const filterOf = (state: string): Exclude<DirectoryFilter, "all"> => state === "active" ? "active" : ["invited", "pending", "expired"].includes(state) ? "invited" : "inactive";
 
 type Tone = "neutral" | "info" | "success" | "warning" | "danger";
@@ -83,13 +89,21 @@ export function PeopleConsole() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [reminders, setReminders] = useState<Record<string, ReminderState>>({});
+  const [cooldownHours, setCooldownHours] = useState(0);
 
   const loadDirectory = useCallback(async () => {
-    const [membersResponse, rolesResponse, invitationsResponse] = await Promise.all([
+    const [membersResponse, rolesResponse, invitationsResponse, remindersResponse] = await Promise.all([
       apiRequest("/admin/members"),
       apiRequest("/admin/roles"),
       apiRequest("/admin/invitations"),
+      apiRequest("/admin/check-in-reminders").catch(() => null),
     ]);
+    if (remindersResponse?.ok) {
+      const overview = (await remindersResponse.json()) as ReminderOverview;
+      setCooldownHours(overview.cooldown_hours);
+      setReminders(Object.fromEntries(overview.candidates.map(({ membership_id, ...state }) => [membership_id, state])));
+    }
     if (membersResponse.status === 403 || rolesResponse.status === 403) {
       router.replace("/home");
       return;
@@ -178,6 +192,40 @@ export function PeopleConsole() {
     }
   };
 
+  const remind = async (member: Member) => {
+    setBusyAction(`remind:${member.id}`); setError(""); setMessage("");
+    try {
+      const response = await apiRequest("/admin/check-in-reminders", { method: "POST", body: JSON.stringify({ membership_ids: [member.id] }) });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
+        setError(typeof payload?.detail === "string" ? payload.detail : "The reminder could not be sent.");
+        return;
+      }
+      const result = (await response.json()) as ReminderResult;
+      const skip = result.skipped[0]?.reason;
+      if (skip === "cooldown") setError(`${member.display_name} was reminded recently, so no reminder was sent.`);
+      else if (skip) setError(`${member.display_name} is no longer an active member.`);
+      else setMessage(`Check-in reminder queued for ${member.display_name}.`);
+      await loadDirectory();
+    } catch {
+      setError("Reminders are temporarily unavailable.");
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const cooldownLabel = cooldownHours % 24 === 0 ? `${cooldownHours / 24} day${cooldownHours === 24 ? "" : "s"}` : `${cooldownHours} hour${cooldownHours === 1 ? "" : "s"}`;
+
+  const reminderButton = (member: Member) => {
+    const state = reminders[member.id];
+    const coolingUntil = state?.cooldown_until ? new Date(state.cooldown_until) : null;
+    const lastSeen = state?.last_signed_in_at ? `Last signed in ${reminderDate.format(new Date(state.last_signed_in_at))}` : "Never signed in";
+    const label = coolingUntil
+      ? `Reminded recently. ${member.display_name} can be reminded again after ${reminderDate.format(coolingUntil)}.`
+      : `Send ${member.display_name} a check-in reminder. ${lastSeen}.`;
+    return <button type="button" aria-label={label} title={label} onClick={() => setConfirmation({ title: `Remind ${member.display_name} to check in?`, description: `They will get an email asking them to sign in to ${session?.tenant.name ?? "TRANSPIRE"}. ${lastSeen}.${cooldownHours ? ` They can't be reminded again for ${cooldownLabel}.` : ""}`, confirmLabel: "Send reminder", busyLabel: "Sending", run: () => remind(member) })} disabled={Boolean(busyAction) || Boolean(coolingUntil) || !state}><BellRing aria-hidden="true" size={15} /></button>;
+  };
+
   const confirmAction = async () => {
     if (!confirmation) return;
     setConfirming(true);
@@ -224,7 +272,7 @@ export function PeopleConsole() {
                 <thead><tr><th>Person</th><th>Access</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>{visibleMembers.map((member) => {
                   const invitation = invitations.find((item) => item.email === member.email);
-                  return <tr key={member.id}><td><div className={styles.person}><span className={styles.avatar} aria-hidden="true">{initials(member.display_name, member.email)}</span><span><strong>{member.display_name}</strong><small>{member.email}</small></span></div></td><td className={styles.access}>{member.roles.map((role) => role.replaceAll("_", " ")).join(", ") || "No role assigned"}</td><td><AccountStatus state={invitation?.status ?? member.status} invitation={Boolean(invitation)} /></td><td><div className={register.actions}>{invitation ? <><button type="button" onClick={() => void invitationAction(invitation, "resend")} disabled={Boolean(busyAction)}><RefreshCw aria-hidden="true" size={15} /> Resend</button>{invitation.status !== "revoked" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: "Revoke this invitation?", description: `The invitation for ${invitation.email} will stop working immediately. You can send a new invitation later.`, confirmLabel: "Revoke invitation", busyLabel: "Revoking", run: () => invitationAction(invitation, "revoke") })} disabled={Boolean(busyAction)}><Ban aria-hidden="true" size={15} /> Revoke</button> : null}</> : member.status === "active" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: `Deactivate ${member.display_name}?`, description: "Their active sessions will end immediately and they will be unable to sign in until reactivated.", confirmLabel: "Deactivate member", busyLabel: "Deactivating", run: () => memberAction(member, "inactive") })} disabled={Boolean(busyAction)}><UserX aria-hidden="true" size={15} /> Deactivate</button> : <button type="button" onClick={() => void memberAction(member, "active")} disabled={Boolean(busyAction)}><UserCheck aria-hidden="true" size={15} /> Reactivate</button>}</div></td></tr>;
+                  return <tr key={member.id}><td><div className={styles.person}><span className={styles.avatar} aria-hidden="true">{initials(member.display_name, member.email)}</span><span><strong>{member.display_name}</strong><small>{member.email}</small></span></div></td><td className={styles.access}>{member.roles.map((role) => role.replaceAll("_", " ")).join(", ") || "No role assigned"}</td><td><AccountStatus state={invitation?.status ?? member.status} invitation={Boolean(invitation)} /></td><td><div className={register.actions}>{invitation ? <><button type="button" onClick={() => void invitationAction(invitation, "resend")} disabled={Boolean(busyAction)}><RefreshCw aria-hidden="true" size={15} /> Resend</button>{invitation.status !== "revoked" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: "Revoke this invitation?", description: `The invitation for ${invitation.email} will stop working immediately. You can send a new invitation later.`, confirmLabel: "Revoke invitation", busyLabel: "Revoking", run: () => invitationAction(invitation, "revoke") })} disabled={Boolean(busyAction)}><Ban aria-hidden="true" size={15} /> Revoke</button> : null}</> : member.status === "active" ? <>{reminderButton(member)}<button type="button" data-tone="danger" onClick={() => setConfirmation({ title: `Deactivate ${member.display_name}?`, description: "Their active sessions will end immediately and they will be unable to sign in until reactivated.", confirmLabel: "Deactivate member", busyLabel: "Deactivating", run: () => memberAction(member, "inactive") })} disabled={Boolean(busyAction)}><UserX aria-hidden="true" size={15} /> Deactivate</button></> : <button type="button" onClick={() => void memberAction(member, "active")} disabled={Boolean(busyAction)}><UserCheck aria-hidden="true" size={15} /> Reactivate</button>}</div></td></tr>;
                 })}</tbody>
               </table>
               {visibleMembers.length === 0 ? <p className={styles.noResults}>No people match these filters.</p> : null}

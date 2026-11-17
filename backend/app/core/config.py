@@ -93,6 +93,11 @@ class Settings(BaseSettings):
         default=48,
         validation_alias="INVITATION_EXPIRY_HOURS",
     )
+    check_in_reminder_cooldown_hours: int = Field(
+        default=72,
+        ge=1,
+        validation_alias="CHECK_IN_REMINDER_COOLDOWN_HOURS",
+    )
     sign_in_rate_limit: int = Field(default=10, validation_alias="SIGN_IN_RATE_LIMIT")
     password_reset_rate_limit: int = Field(
         default=5,

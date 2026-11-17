@@ -1,12 +1,14 @@
-Hello {{ recipient_name }},
+You're invited, {{ recipient_name.split(' ')[0] }}.
 
-{{ inviter_name }} has invited you to join {{ tenant_name }} on TRANSPIRE.
-
-Set up your access to share observations, follow ideas, and help improvement move forward.
+{{ inviter_name }} has invited you to join {{ tenant_name }} on TRANSPIRE, where colleagues share ideas and turn them into real improvements.
 
 {{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
 
-This invitation expires in {{ expires_in }}. If you were not expecting it, you can safely ignore this email.
+Invited by: {{ inviter_name }}
+Expires in: {{ expires_in }}
+
+Not expecting this? You can safely ignore this email.
 
 Ideate. Transform. Inspire.
-Transform ideas. Inspire progress.
+{% if secondary_url is defined %}You're receiving this as a member of {{ tenant_name }} on TRANSPIRE.{% else %}Automated message from TRANSPIRE for {{ tenant_name }}.{% endif %}

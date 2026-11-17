@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light only">
+    <title>{{ subject }}</title>
+    <style>
+      @media only screen and (max-width: 600px) {
+        .m-shell { width: 100% !important; }
+        .m-pad { padding-left: 24px !important; padding-right: 24px !important; }
+        .m-title { font-size: 28px !important; line-height: 34px !important; }
+        .m-btn { display: block !important; width: 100% !important; }
+        .m-btn-gap { display: block !important; height: 10px !important; width: 100% !important; }
+        .m-full { width: 100% !important; }
+        .m-hide { display: none !important; }
+      }
+    </style>
+  </head>
+  <body style="margin:0;padding:0;background:#f2f5f8;color:#0c2340;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Aptos,Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;">{% block preheader %}{% endblock %}</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#f2f5f8;">
+      <tr>
+        <td align="center" style="padding:40px 16px;">
+          <table class="m-shell" role="presentation" width="560" cellspacing="0" cellpadding="0" border="0" style="width:560px;max-width:560px;">
+            <tr>
+              <td style="padding:0 8px 20px;">
+                <img src="{{ logo_url }}" width="148" alt="TRANSPIRE" style="display:block;width:148px;height:auto;border:0;">
+              </td>
+            </tr>
+            <tr>
+              <td style="background:#ffffff;border-radius:16px;border:1px solid #e3e9ef;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                  <tr>
+                    <td class="m-pad" style="padding:40px 44px 0;">
+                      <span style="display:inline-block;padding:5px 12px;border-radius:999px;background:#e8f3fa;color:#006fae;font-size:12px;font-weight:700;letter-spacing:.2px;">{% block badge %}TRANSPIRE{% endblock %}</span>
+                      <h1 class="m-title" style="margin:18px 0 0;font-size:32px;line-height:38px;font-weight:800;letter-spacing:-.8px;color:#0c2340;">{% block title %}{% endblock %}</h1>
+                      <div style="margin:14px 0 0;font-size:16px;line-height:25px;color:#4a6175;">{% block intro %}{% endblock %}</div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="m-pad" style="padding:28px 44px 0;">
+                      <table class="m-full" role="presentation" cellspacing="0" cellpadding="0" border="0">
+                        <tr>
+                          <td class="m-btn" align="center" bgcolor="#006fae" style="border-radius:10px;background:#006fae;">
+                            <a href="{{ action_url }}" style="display:block;padding:14px 24px;color:#ffffff;font-size:15px;font-weight:700;line-height:20px;text-decoration:none;">{{ action_label }}</a>
+                          </td>
+                          {% if secondary_url is defined and secondary_label is defined %}
+                          <td class="m-btn-gap" width="10" style="width:10px;font-size:0;line-height:0;">&nbsp;</td>
+                          <td class="m-btn" align="center" style="border-radius:10px;border:1px solid #cfdbe5;">
+                            <a href="{{ secondary_url }}" style="display:block;padding:13px 22px;color:#0c2340;font-size:15px;font-weight:600;line-height:20px;text-decoration:none;">{{ secondary_label }}</a>
+                          </td>
+                          {% endif %}
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td class="m-pad" style="padding:28px 44px 40px;font-size:15px;line-height:24px;color:#4a6175;">{% block body %}{% endblock %}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            <tr>
+              <td align="center" class="m-pad" style="padding:24px 24px 0;font-size:12px;line-height:19px;color:#7c8fa0;">
+                <p style="margin:0 0 6px;font-weight:700;color:#4a6175;">Ideate. Transform. Inspire.</p>
+                <p style="margin:0;">{% block footer %}{% if secondary_url is defined %}You're receiving this as a member of {{ tenant_name }} on TRANSPIRE. <a href="{{ secondary_url }}" style="color:#006fae;">Manage preferences</a>{% else %}Automated message from TRANSPIRE{% if tenant_name is defined %} for {{ tenant_name }}{% endif %}.{% endif %}{% endblock %}</p>
+                <p style="margin:6px 0 0;">Button not working? <a href="{{ action_url }}" style="color:#006fae;">Open this link</a> · © {{ current_year }} TRANSPIRE</p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

@@ -39,3 +39,11 @@ def tenant_frontend_url(
             "",
         )
     )
+
+
+def preferences_link(settings: Settings, tenant_slug: str) -> dict[str, str]:
+    """Template data for the "Manage preferences" button on emails to existing members."""
+    return {
+        "secondary_url": tenant_frontend_url(settings, tenant_slug, "/profile"),
+        "secondary_label": "Manage preferences",
+    }

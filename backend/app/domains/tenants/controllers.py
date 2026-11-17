@@ -170,7 +170,7 @@ async def _queue_invitation(
             tenant_id=tenant_id,
             recipient=email,
             template_key="invitation",
-            subject=f"You are invited to {tenant_name} on TRANSPIRE",
+            subject=f"You're invited to join {tenant_name} on TRANSPIRE",
             template_data={
                 "recipient_name": display_name,
                 "tenant_name": tenant_name,

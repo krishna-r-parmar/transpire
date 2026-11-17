@@ -35,6 +35,8 @@ TEMPLATE_CASES = {
         "idea_title": "Reduce changeover waiting time",
         "action_url": "https://example.transpire.test/ideas/IDEA-2026-0001",
         "action_label": "View your idea",
+        "secondary_url": "https://example.transpire.test/t/example/profile",
+        "secondary_label": "Manage preferences",
     },
     "project_charter_ready": {
         "recipient_name": "Avery <script>",
@@ -43,6 +45,8 @@ TEMPLATE_CASES = {
         "idea_title": "Reduce changeover waiting time",
         "action_url": "https://example.transpire.test/ideas/00000000-0000-0000-0000-000000000001?section=project-charter",
         "action_label": "Complete project charter",
+        "secondary_url": "https://example.transpire.test/t/example/profile",
+        "secondary_label": "Manage preferences",
     },
     "project_team_invitation": {
         "recipient_name": "Avery <script>",
@@ -52,6 +56,8 @@ TEMPLATE_CASES = {
         "project_lead": "Jordan Lee",
         "action_url": "https://example.transpire.test/projects/00000000-0000-0000-0000-000000000001",
         "action_label": "Review project invitation",
+        "secondary_url": "https://example.transpire.test/t/example/profile",
+        "secondary_label": "Manage preferences",
     },
     "account_security": {
         "recipient_name": "Avery <script>",
@@ -60,6 +66,16 @@ TEMPLATE_CASES = {
         "event_time": "18 August 2026 at 14:30 IST",
         "action_url": "https://example.transpire.test/account/security",
         "action_label": "Review account security",
+        "secondary_url": "https://example.transpire.test/t/example/profile",
+        "secondary_label": "Manage preferences",
+    },
+    "check_in_reminder": {
+        "recipient_name": "Avery <script>",
+        "tenant_name": "Example Industries",
+        "action_url": "https://example.transpire.test/t/example/sign-in",
+        "action_label": "Sign in to TRANSPIRE",
+        "secondary_url": "https://example.transpire.test/t/example/profile",
+        "secondary_label": "Manage preferences",
     },
     "sso_migration": {
         "recipient_name": "Avery <script>",
@@ -67,6 +83,8 @@ TEMPLATE_CASES = {
         "effective_time": "16 September 2026 at 10:30 UTC",
         "action_url": "https://example.transpire.test/t/example/sign-in",
         "action_label": "Sign in with Microsoft",
+        "secondary_url": "https://example.transpire.test/t/example/profile",
+        "secondary_label": "Manage preferences",
     },
     "sso_recovery": {
         "recipient_name": "Avery <script>",
@@ -99,8 +117,14 @@ def test_transactional_template_renders_html_and_text(
     assert 'src="http://localhost:3000/brand/transpire-logo.png"' in rendered.html_body
     assert str(template_data["action_url"]) in rendered.html_body
     assert str(template_data["action_url"]) in rendered.text_body
-    assert "Avery &lt;script&gt;" in rendered.html_body
-    assert "Avery <script>" not in rendered.html_body
+    assert "<script>" not in rendered.html_body
+    assert str(template_data["action_label"]) in rendered.html_body
+    if "secondary_url" in template_data:
+        assert "Manage preferences" in rendered.html_body
+        assert str(template_data["secondary_url"]) in rendered.text_body
+    else:
+        assert "Manage preferences" not in rendered.html_body
+        assert "Automated message from TRANSPIRE" in rendered.html_body
 
 
 def test_renderer_rejects_unknown_template() -> None:
@@ -164,3 +188,52 @@ async def test_smtp_transport_uses_certifi_ca_bundle(
     assert captured_options["password"] is None
     assert captured_options["start_tls"] is True
     assert captured_options["use_tls"] is False
+
+
+def test_check_in_reminder_puts_actions_first_and_greets_by_first_name() -> None:
+    renderer = EmailTemplateRenderer()
+    data = TEMPLATE_CASES["check_in_reminder"]
+    rendered = renderer.render(
+        EmailMessage(
+            tenant_id=uuid.uuid4(),
+            recipient="avery@example.com",
+            template_key="check_in_reminder",
+            subject="Reminder: check in to Example Industries on TRANSPIRE",
+            template_data=data,
+        )
+    )
+    assert "Manage preferences" in rendered.html_body
+    assert "/t/example/profile" in rendered.html_body
+    # Both buttons come before the "What you can do today" cards.
+    assert rendered.html_body.index("Sign in to TRANSPIRE") < rendered.html_body.index("Share an idea")
+    assert "Time to check in, Avery." in rendered.text_body
+
+    hostile = renderer.render(
+        EmailMessage(
+            tenant_id=uuid.uuid4(),
+            recipient="avery@example.com",
+            template_key="check_in_reminder",
+            subject="Reminder",
+            template_data={**data, "recipient_name": "<img>Avery Lee"},
+        )
+    )
+    assert "Time to check in, &lt;img&gt;Avery." in hostile.html_body
+
+
+def test_detail_values_and_first_names_are_escaped() -> None:
+    rendered = EmailTemplateRenderer().render(
+        EmailMessage(
+            tenant_id=uuid.uuid4(),
+            recipient="avery@example.com",
+            template_key="project_charter_ready",
+            subject="Your idea IDEA-2026-0001 is approved",
+            template_data={
+                **TEMPLATE_CASES["project_charter_ready"],
+                "recipient_name": "<i>Avery Lee",
+                "idea_title": "<b>Faster</b> changeovers",
+            },
+        )
+    )
+    assert "&lt;b&gt;Faster&lt;/b&gt; changeovers" in rendered.html_body
+    assert "Great news, &lt;i&gt;Avery." in rendered.html_body
+    assert "<b>Faster</b>" not in rendered.html_body

@@ -15,10 +15,10 @@ export const metadata: Metadata = {
 const lastUpdated = "3 November 2026";
 const contact = {
   entity: "Dishman Carbogen Amcis Ltd.",
-  address: "[Registered office address to be confirmed]",
-  email: "[Privacy contact email to be confirmed]",
-  grievanceOfficer: "[Grievance Officer name to be confirmed]",
-  euRepresentative: "[EU / UK representative, if required, to be confirmed]",
+  address: "Iscon-Ambli Road, Ahmedabad",
+  email: "grievance@imdcal.com",
+  grievanceOfficer: "Mrs. Shrima Dave",
+  euRepresentative: "Secretary of Dishman Carbogen Amcis Ltd.",
 };
 
 const sections = [

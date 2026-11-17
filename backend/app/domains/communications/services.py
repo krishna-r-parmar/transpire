@@ -21,6 +21,7 @@ TEMPLATE_ROOT = Path(__file__).with_name("templates")
 SUPPORTED_TEMPLATES = frozenset(
     {
         "account_security",
+        "check_in_reminder",
         "idea_submission_confirmation",
         "invitation",
         "password_reset",

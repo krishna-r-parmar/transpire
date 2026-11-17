@@ -8,7 +8,7 @@ from sqlalchemy.orm import aliased
 
 from app.core.config import Settings
 from app.core.tenant_context import apply_tenant_to_transaction
-from app.core.urls import tenant_frontend_url
+from app.core.urls import preferences_link, tenant_frontend_url
 from app.domains.audit.controllers import record_audit_event
 from app.domains.communications.controllers import enqueue_email
 from app.domains.communications.schemas import EmailMessage
@@ -1059,6 +1059,9 @@ async def decide_approval_stage(
                                     query={"section": "project-charter"},
                                 ),
                                 "action_label": "Complete project charter",
+                                **preferences_link(
+                                    settings, tenant_record.slug if tenant_record else ""
+                                ),
                             },
                         ),
                         settings,

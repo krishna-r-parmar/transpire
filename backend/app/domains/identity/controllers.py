@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.tenant_context import apply_tenant_to_transaction
 from app.core.tenant_resolution import ResolvedTenant
-from app.core.urls import tenant_frontend_url
+from app.core.urls import preferences_link, tenant_frontend_url
 from app.domains.communications.controllers import enqueue_email
 from app.domains.communications.schemas import EmailMessage
 from app.domains.identity.models import (
@@ -625,6 +625,7 @@ async def request_global_password_reset(
                             settings, workspace.slug, "/sign-in"
                         ),
                         "action_label": "Sign in with Microsoft",
+                        **preferences_link(settings, workspace.slug),
                     },
                 ),
                 settings,
@@ -898,6 +899,7 @@ async def reset_password(
                             settings, tenant.slug, "/sign-in"
                         ),
                         "action_label": "Return to TRANSPIRE",
+                        **preferences_link(settings, tenant.slug),
                     },
                 ),
                 settings,
@@ -1043,6 +1045,7 @@ async def accept_invitation(
                                 settings, tenant.slug, "/sign-in"
                             ),
                             "action_label": "Sign in to TRANSPIRE",
+                            **preferences_link(settings, tenant.slug),
                         },
                     ),
                     settings,

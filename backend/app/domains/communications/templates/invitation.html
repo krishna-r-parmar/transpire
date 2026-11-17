@@ -1,10 +1,10 @@
-{% extends "base.html" %}
-{% block preheader %}You have been invited to join {{ tenant_name }} on TRANSPIRE.{% endblock %}
-{% block eyebrow %}Your TRANSPIRE invitation{% endblock %}
-{% block title %}A place for your ideas is ready.{% endblock %}
-{% block content %}
-  <p style="margin:0 0 18px;">Hello {{ recipient_name }},</p>
-  <p style="margin:0 0 18px;"><strong>{{ inviter_name }}</strong> has invited you to join <strong>{{ tenant_name }}</strong> on TRANSPIRE.</p>
-  <p style="margin:0 0 18px;">Set up your access to share observations, follow ideas, and help improvement move forward.</p>
-  <p style="margin:0;padding:15px 17px;background:#eaf4fa;border:1px solid #c7dfea;font-size:13px;line-height:20px;color:#29475d;">This invitation expires in {{ expires_in }}. If you were not expecting it, you can safely ignore this email.</p>
+{% extends "base_modern.html" %}
+{% from "_components.html" import details, closing %}
+{% block preheader %}{{ inviter_name }} invited you to share and shape ideas at {{ tenant_name }}.{% endblock %}
+{% block badge %}Invitation{% endblock %}
+{% block title %}You're invited, {{ recipient_name.split(' ')[0] }}.{% endblock %}
+{% block intro %}{{ inviter_name }} has invited you to join {{ tenant_name }} on TRANSPIRE, where colleagues share ideas and turn them into real improvements.{% endblock %}
+{% block body %}
+  {{ details([("Invited by", inviter_name), ("Expires in", expires_in)]) }}
+  {{ closing("Not expecting this? You can safely ignore this email.") }}
 {% endblock %}

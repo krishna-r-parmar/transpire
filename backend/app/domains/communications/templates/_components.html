@@ -1,0 +1,17 @@
+{# Shared building blocks for templates that extend base_modern.html. #}
+{% macro details(rows) %}
+<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 22px;border-radius:12px;background:#f6f9fb;">
+  {% for label, value in rows %}
+  <tr>
+    <td style="padding:{{ '14px' if loop.first else '0' }} 18px {{ '14px' if loop.last else '10px' }};">
+      <p style="margin:0 0 2px;font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#7c8fa0;">{{ label }}</p>
+      <p style="margin:0;font-size:15px;font-weight:600;line-height:22px;color:#0c2340;">{{ value }}</p>
+    </td>
+  </tr>
+  {% endfor %}
+</table>
+{% endmacro %}
+
+{% macro closing(text) %}
+<p style="margin:0;font-size:14px;line-height:22px;color:#5a6f82;">{{ text }}</p>
+{% endmacro %}

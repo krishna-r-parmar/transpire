@@ -79,3 +79,39 @@ class TenantMemberSummary(BaseModel):
     display_name: str
     status: str
     roles: list[str]
+
+
+class CheckInReminderCandidate(BaseModel):
+    membership_id: uuid.UUID
+    email: EmailStr
+    display_name: str
+    roles: list[str]
+    last_signed_in_at: datetime | None
+    last_reminded_at: datetime | None
+    reminder_count: int
+    cooldown_until: datetime | None
+
+
+class CheckInReminderOverview(BaseModel):
+    cooldown_hours: int
+    candidates: list[CheckInReminderCandidate]
+
+
+class CheckInReminderCommand(BaseModel):
+    membership_ids: list[uuid.UUID] = Field(min_length=1, max_length=500)
+
+
+class CheckInReminderPreview(BaseModel):
+    subject: str
+    html_body: str
+    text_body: str
+
+
+class CheckInReminderSkip(BaseModel):
+    membership_id: uuid.UUID
+    reason: Literal["cooldown", "not_eligible"]
+
+
+class CheckInReminderResult(BaseModel):
+    queued: list[uuid.UUID]
+    skipped: list[CheckInReminderSkip]

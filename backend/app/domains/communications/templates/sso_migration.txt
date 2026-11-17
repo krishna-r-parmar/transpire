@@ -1,12 +1,11 @@
-Hello {{ recipient_name }},
+Sign in with Microsoft from now on.
 
-{{ tenant_name }} moved TRANSPIRE access to Microsoft SSO on {{ effective_time }}.
+{{ tenant_name }} switched TRANSPIRE to Microsoft sign-in on {{ effective_time }}. Next time, sign in with the Microsoft account for this work email.
 
-Use the Microsoft account matching this work email when you next sign in. Your ideas, projects, approvals, roles, and history are unchanged.
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
 
-Sign in: {{ action_url }}
-
-If Microsoft does not recognise your account, contact your organisation's TRANSPIRE administrator.
+Your ideas, projects, approvals and history haven't changed. Trouble signing in? Contact your TRANSPIRE administrator.
 
 Ideate. Transform. Inspire.
-Transform ideas. Inspire progress.
+{% if secondary_url is defined %}You're receiving this as a member of {{ tenant_name }} on TRANSPIRE.{% else %}Automated message from TRANSPIRE for {{ tenant_name }}.{% endif %}

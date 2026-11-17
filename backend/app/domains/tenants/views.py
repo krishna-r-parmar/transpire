@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
@@ -34,7 +35,16 @@ from app.domains.tenants.controllers import (
     revoke_invitation,
 )
 from app.domains.tenants.models import TenantStatus
+from app.domains.tenants.reminders import (
+    list_check_in_candidates,
+    preview_check_in_reminder,
+    send_check_in_reminders,
+)
 from app.domains.tenants.schemas import (
+    CheckInReminderCommand,
+    CheckInReminderOverview,
+    CheckInReminderPreview,
+    CheckInReminderResult,
     InvitationCreateCommand,
     InvitationResult,
     InvitationSummary,
@@ -332,3 +342,40 @@ async def update_tenant_member_status(
     except MembershipConflictError as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/admin/check-in-reminders", response_model=CheckInReminderOverview)
+async def get_check_in_reminder_candidates(
+    _: TenantAdminIdentity,
+    tenant: TenantDependency,
+    settings: SettingsDependency,
+    session: SessionDependency,
+    inactive_days: Annotated[int | None, Query(ge=1, le=3650)] = None,
+) -> CheckInReminderOverview:
+    return await list_check_in_candidates(
+        tenant.tenant_id, settings, session, inactive_days=inactive_days
+    )
+
+
+@router.get("/admin/check-in-reminders/preview", response_model=CheckInReminderPreview)
+async def preview_tenant_check_in_reminder(
+    identity: TenantAdminIdentity,
+    tenant: TenantDependency,
+    settings: SettingsDependency,
+) -> CheckInReminderPreview:
+    return preview_check_in_reminder(identity, tenant, settings)
+
+
+@router.post(
+    "/admin/check-in-reminders",
+    response_model=CheckInReminderResult,
+    status_code=status.HTTP_202_ACCEPTED,
+)
+async def send_tenant_check_in_reminders(
+    command: CheckInReminderCommand,
+    identity: TenantAdminIdentity,
+    tenant: TenantDependency,
+    settings: SettingsDependency,
+    session: SessionDependency,
+) -> CheckInReminderResult:
+    return await send_check_in_reminders(command, identity, tenant, settings, session)

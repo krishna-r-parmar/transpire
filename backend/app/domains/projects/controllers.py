@@ -8,7 +8,7 @@ from sqlalchemy.orm import aliased
 
 from app.core.config import Settings
 from app.core.tenant_context import apply_tenant_to_transaction
-from app.core.urls import tenant_frontend_url
+from app.core.urls import preferences_link, tenant_frontend_url
 from app.domains.audit.controllers import record_audit_event
 from app.domains.audit.models import AuditEvent
 from app.domains.communications.controllers import enqueue_email
@@ -152,7 +152,7 @@ async def assign_project_team(
                 tenant_id=tenant_id,
                 recipient=user.email,
                 template_key="project_team_invitation",
-                subject=f"You are invited to project {project.reference}",
+                subject=f"You're invited to project {project.reference}",
                 template_data={
                     "recipient_name": user.display_name,
                     "tenant_name": tenant_name,
@@ -161,6 +161,7 @@ async def assign_project_team(
                     "project_lead": project.lead_name,
                     "action_url": tenant_frontend_url(settings, tenant_slug, "/projects"),
                     "action_label": "Review project invitation",
+                    **preferences_link(settings, tenant_slug),
                 },
             ),
             settings,

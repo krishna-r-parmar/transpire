@@ -1,0 +1,16 @@
+Time to check in, {{ recipient_name.split(' ')[0] }}.
+
+Your colleagues at {{ tenant_name }} are sharing ideas and moving improvements forward. Sign in to catch up on what's new and add your voice.
+
+Sign in: {{ action_url }}
+
+What you can do today:
+- Share an idea: spotted something that could work better? It only takes a couple of minutes.
+- Track your ideas: see where each idea is in review and what happens next.
+- Clear your queue: pick up approvals and project tasks waiting for you.
+
+Small improvements add up. Thanks for being part of it.
+
+Ideate. Transform. Inspire.
+You're receiving this as a member of {{ tenant_name }} on TRANSPIRE.
+Manage preferences: {{ secondary_url }}
