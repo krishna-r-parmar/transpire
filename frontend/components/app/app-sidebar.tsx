@@ -2,6 +2,7 @@
 
 import { ArrowLeft, Bell, ChevronsUpDown, FileClock, FolderKanban, Home, ListFilter, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Settings2, X } from "lucide-react";
 import Image from "next/image";
+import { BetaTag } from "@/components/ui/beta-tag";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { TenantLink as Link } from "@/components/app/tenant-link";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
@@ -54,7 +55,7 @@ export function AppSidebar({ session, active }: { session: SessionIdentity; acti
   return <>
     <div className={styles.mobileBar}>
       <button type="button" className={styles.iconButton} onClick={() => setDrawerOpen(true)} aria-label="Open navigation" aria-expanded={drawerOpen} aria-controls="app-sidebar"><Menu size={20} aria-hidden="true" /></button>
-      <Link className={styles.mobileLogo} href="/home" aria-label="TRANSPIRE home"><Image src="/brand/transpire-logo.png" alt="TRANSPIRE" width={1400} height={371} priority /></Link>
+      <Link className={styles.mobileLogo} href="/home" aria-label="TRANSPIRE home"><Image src="/brand/transpire-logo.png" alt="TRANSPIRE" width={1400} height={371} priority /><BetaTag /></Link>
       <Link className={styles.iconButton} href="/notifications" aria-label={approvalCount ? `Approvals, ${approvalCount} need attention` : "Approvals"}><Bell size={19} aria-hidden="true" />{badge}</Link>
     </div>
     <button type="button" className={styles.backdrop} data-open={drawerOpen} onClick={() => setDrawerOpen(false)} aria-label="Close navigation" tabIndex={drawerOpen ? 0 : -1} />
@@ -64,6 +65,7 @@ export function AppSidebar({ session, active }: { session: SessionIdentity; acti
         <Link className={styles.logo} href="/home" aria-label="TRANSPIRE home">
           <Image className={styles.logoFull} src="/brand/transpire-logo.png" alt="" width={1400} height={371} priority />
           <Image className={styles.logoMark} src="/brand/transpire-icon-192.png" alt="" width={192} height={192} />
+          <BetaTag className={styles.logoBeta} />
         </Link>
         <button type="button" className={`${styles.iconButton} ${styles.collapse}`} onClick={toggleCollapsed} aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"} title={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
           {collapsed ? <PanelLeftOpen size={18} aria-hidden="true" /> : <PanelLeftClose size={18} aria-hidden="true" />}

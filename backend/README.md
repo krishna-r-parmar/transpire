@@ -17,7 +17,7 @@ Tenant-aware APIs are available under `/api/v1/t/{tenant_shortname}`. The shortn
 
 ## Local sign-in
 
-Configure `DEV_ADMIN_PASSWORD` in the ignored `backend/.env`, then run from `backend/`:
+Configure `DEV_ADMIN_PASSWORD` in the ignored repository-root `.env`, then run from `backend/`:
 
 ```bash
 .venv/bin/alembic upgrade head
@@ -105,7 +105,7 @@ Email jobs are inserted in the same transaction as the business change. Sensitiv
 .venv/bin/python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
 ```
 
-Keep this key in the ignored `backend/.env` or a production secret manager. Losing or rotating it makes already-queued sensitive messages unreadable.
+Keep this key in the ignored repository-root `.env` or a production secret manager. Losing or rotating it makes already-queued sensitive messages unreadable.
 
 Set `PUBLIC_APP_URL` to the externally reachable shared TRANSPIRE origin. Tenant links are generated beneath `/t/{shortname}`; invitation acceptance remains on the shared origin because its single-use token securely carries tenant context. Use `http://localhost:3000` locally and the central TRANSPIRE application origin in production.
 
@@ -132,7 +132,7 @@ The migrations create tenant, identity, authentication-audit, and email-delivery
 
 ## SMTP configuration
 
-Local backend credentials belong in `backend/.env`, which is ignored by Git. A shareable template is available at `backend/.env.example`.
+Local credentials belong in the repository-root `.env` (shared with the frontend, as on the server), which is ignored by Git. The template is the root `.env.example`.
 
 Keep `EMAIL_BACKEND=console` while developing without a mail server. To send real mail, set:
 

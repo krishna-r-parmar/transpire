@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { BetaTag } from "@/components/ui/beta-tag";
 import Link from "next/link";
 import { Reveal } from "@/components/landing/reveal";
 import { EnterpriseFooter } from "@/components/landing/enterprise-footer";
@@ -40,6 +41,7 @@ export default function LandingPage() {
       <header className={styles.header}>
         <Link className={styles.brand} href="/" aria-label="TRANSPIRE home">
           <Image src="/brand/transpire-logo.png" alt="TRANSPIRE, Ideate. Transform. Inspire." width={1400} height={371} priority />
+          <BetaTag />
         </Link>
         <nav className={styles.nav} aria-label="Primary navigation">
           <a href="#how">How it works</a>

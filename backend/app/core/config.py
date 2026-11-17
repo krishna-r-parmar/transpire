@@ -5,11 +5,14 @@ from pydantic import EmailStr, Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parents[2]
+# One .env at the repository root serves backend and frontend, locally and on the
+# server. Inside the container no such file exists; Compose injects the values.
+REPO_ROOT = BACKEND_ROOT.parent
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=BACKEND_ROOT / ".env",
+        env_file=REPO_ROOT / ".env",
         env_file_encoding="utf-8",
         extra="ignore",
     )

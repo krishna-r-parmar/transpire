@@ -9,8 +9,8 @@
 .skipLink:focus { transform:translateY(0); }
 
 .header { display:grid; min-height:5rem; align-items:center; gap:1rem; padding:0 var(--inset); background:var(--paper); border-bottom:1px solid oklch(90% .02 242); grid-template-columns:1fr auto auto; }
-.brand { width:10rem; }
-.brand img { width:100%; height:auto; }
+.brand { display:inline-flex; align-items:center; gap:.5rem; justify-self:start; }
+.brand img { width:10rem; height:auto; }
 .signIn { display:inline-flex; min-height:2.75rem; align-items:center; padding:0 1.25rem; border-radius:999px; background:var(--navy); color:var(--paper); font-size:.92rem; font-weight:650; }
 
 .layout { display:grid; gap:2.5rem; max-width:var(--max); margin:0 auto; padding:clamp(3rem,6vw,4.5rem) var(--gutter) clamp(4rem,8vw,6rem); }

@@ -14,7 +14,7 @@ services:
     build:
       context: ./backend
     env_file:
-      - ./backend/.env
+      - ./.env
     ports:
       - "8000:8000"
     environment:
@@ -32,7 +32,7 @@ services:
     build:
       context: ./backend
     env_file:
-      - ./backend/.env
+      - ./.env
     command: ["python", "scripts/process_email_outbox.py", "--watch"]
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql+asyncpg://transpire:change-me@database:5432/transpire}

@@ -1,0 +1,8 @@
+/* Small "Beta" pill shown beside the TRANSPIRE logo while the product is in beta. */
+.tag {
+  display: inline-flex; flex: 0 0 auto; align-items: center; height: 1.25rem; padding: 0 .45rem;
+  border: 1px solid oklch(59.157% .14157 242.451 / .45); border-radius: 999px;
+  background: oklch(59.157% .14157 242.451 / .1); color: oklch(45% .13 246);
+  font-size: .62rem; font-weight: 700; letter-spacing: .08em; line-height: 1; text-transform: uppercase; white-space: nowrap;
+}
+:global(html[data-theme="dark"]) .tag { border-color: oklch(75% .11 242 / .5); background: oklch(75% .11 242 / .14); color: oklch(84% .09 242); }

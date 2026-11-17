@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { BetaTag } from "@/components/ui/beta-tag";
 import { usePathname } from "next/navigation";
 import { TenantLink as Link } from "@/components/app/tenant-link";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
@@ -321,6 +322,7 @@ export function SignInPortal({ returnedWithSSOError = false, selectingSSOWorkspa
               height={371}
               priority
             />
+            <BetaTag />
           </Link>
           <Link className={styles.backLink} href="/">Back to website <span aria-hidden="true">↗</span></Link>
         </header>

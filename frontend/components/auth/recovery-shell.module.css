@@ -15,8 +15,8 @@
 
 .formSide { display: grid; min-height: 100svh; padding: 0 clamp(1.25rem, 5vw, 4.5rem); grid-template-rows: auto 1fr auto; }
 .header { display: flex; min-height: 6.4rem; align-items: center; justify-content: space-between; gap: 1.5rem; border-bottom: 1px solid var(--line); }
-.brand { display: inline-flex; width: 12.5rem; }
-.brand img { width: 100%; height: auto; }
+.brand { display: inline-flex; align-items: center; gap: .6rem; }
+.brand img { width: 12.5rem; height: auto; }
 .header > a:last-child { color: var(--blue-deep); font-size: .76rem; font-weight: 750; }
 .formShell { width: 100%; max-width: 28rem; align-self: center; justify-self: center; padding: clamp(3.5rem, 9vh, 6rem) 0; }
 .intro { margin-bottom: 2rem; }

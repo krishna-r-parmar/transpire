@@ -1,5 +1,6 @@
 import { Check, LockKeyhole } from "lucide-react";
 import Image from "next/image";
+import { BetaTag } from "@/components/ui/beta-tag";
 import { TenantLink as Link } from "@/components/app/tenant-link";
 import type { ReactNode } from "react";
 import styles from "./recovery-shell.module.css";
@@ -41,6 +42,7 @@ export function RecoveryShell({
               height={371}
               priority
             />
+            <BetaTag />
           </Link>
           <Link href="/sign-in">Back to sign in</Link>
         </header>

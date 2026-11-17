@@ -10,8 +10,8 @@
 .sidebar[data-open="true"] { visibility: visible; transform: none; box-shadow: 0 30px 80px oklch(15% .05 254 / .3); transition-delay: 0s; }
 
 .top { display: flex; min-height: 3rem; align-items: center; justify-content: space-between; gap: .5rem; padding-left: .35rem; }
-.logo { display: flex; min-width: 0; align-items: center; }
-.logoFull { width: 9.5rem; height: auto; }
+.logo { display: flex; min-width: 0; align-items: center; gap: .4rem; }
+.logoFull { width: 7.6rem; min-width: 0; height: auto; }
 .logoMark { display: none; width: 2.1rem; height: 2.1rem; border-radius: .5rem; }
 .iconButton { position: relative; display: inline-grid; width: 2.5rem; height: 2.5rem; flex: 0 0 auto; cursor: pointer; place-items: center; border: 0; border-radius: .6rem; background: transparent; color: var(--sb-muted, oklch(46% .03 250)); }
 .iconButton:hover { background: var(--sb-hover, oklch(94.5% .02 242)); color: var(--sb-ink, oklch(24% .05 254)); }
@@ -56,8 +56,8 @@
 .workspaces strong small { color: var(--sb-muted); font-weight: 500; }
 
 .mobileBar { position: sticky; z-index: 40; top: 0; display: flex; min-height: 3.75rem; align-items: center; justify-content: space-between; gap: .75rem; padding: .4rem max(.75rem, env(safe-area-inset-right)) .4rem max(.75rem, env(safe-area-inset-left)); border-bottom: 1px solid oklch(89% .018 242); background: oklch(98.6% .006 240); }
-.mobileLogo { width: 8.5rem; }
-.mobileLogo img { width: 100%; height: auto; }
+.mobileLogo { display: inline-flex; align-items: center; gap: .45rem; }
+.mobileLogo img { width: 8.5rem; height: auto; }
 .backdrop { position: fixed; z-index: 55; inset: 0; border: 0; background: oklch(15% .05 254 / .4); opacity: 0; pointer-events: none; transition: opacity 200ms ease; }
 .backdrop[data-open="true"] { opacity: 1; pointer-events: auto; }
 
@@ -71,6 +71,7 @@
   :global(html[data-sidebar="collapsed"]) .sidebar { width: 4.75rem; overflow: visible; padding-inline: .6rem; }
   :global(html[data-sidebar="collapsed"]) .top { flex-direction: column; padding-left: 0; }
   :global(html[data-sidebar="collapsed"]) .logoFull,
+  :global(html[data-sidebar="collapsed"]) .logoBeta,
   :global(html[data-sidebar="collapsed"]) .org,
   :global(html[data-sidebar="collapsed"]) .itemLabel,
   :global(html[data-sidebar="collapsed"]) .submit span,

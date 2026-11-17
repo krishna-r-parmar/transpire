@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { BetaTag } from "@/components/ui/beta-tag";
 import Link from "next/link";
 import { EnterpriseFooter } from "@/components/landing/enterprise-footer";
 import { ThemeToggle } from "../theme-toggle";
@@ -44,6 +45,7 @@ export default function PrivacyPage() {
       <header className={styles.header}>
         <Link className={styles.brand} href="/" aria-label="TRANSPIRE home">
           <Image src="/brand/transpire-logo.png" alt="TRANSPIRE, Ideate. Transform. Inspire." width={1400} height={371} priority />
+          <BetaTag />
         </Link>
         <ThemeToggle />
         <Link className={styles.signIn} href="/sign-in">Sign in</Link>

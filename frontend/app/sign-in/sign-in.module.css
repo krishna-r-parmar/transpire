@@ -46,8 +46,8 @@
   gap: 1.5rem;
   border-bottom: 1px solid var(--line);
 }
-.brand { display: inline-flex; width: 12.5rem; align-items: center; }
-.brand img { width: 100%; height: auto; }
+.brand { display: inline-flex; align-items: center; gap: .6rem; }
+.brand img { width: 12.5rem; height: auto; }
 .backLink { display: none; color: var(--muted); font-size: .78rem; font-weight: 700; }
 .backLink span { display: inline-block; margin-left: .35rem; transition: transform 160ms var(--ease-out); }
 
