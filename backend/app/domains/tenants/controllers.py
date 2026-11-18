@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.core.tenant_context import apply_tenant_to_transaction
 from app.core.urls import platform_frontend_url
+from app.domains.audit.controllers import record_audit_event
 from app.domains.communications.controllers import enqueue_email
 from app.domains.communications.models import EmailDelivery, EmailDeliveryStatus
 from app.domains.communications.schemas import EmailMessage
@@ -15,6 +16,12 @@ from app.domains.configuration.controllers import (
     create_default_workflow,
 )
 from app.domains.ideas.services import create_default_idea_bank_policy
+from app.domains.identity.access import (
+    ROLES_BY_KEY,
+    WORKSPACE_OWNER,
+    WORKSPACE_ROLES,
+    can_manage_role,
+)
 from app.domains.identity.models import (
     AuthSession,
     InvitationToken,
@@ -27,6 +34,7 @@ from app.domains.identity.repositories import SQLAlchemyIdentityRepository
 from app.domains.identity.schemas import SessionIdentity
 from app.domains.identity.services import generate_session_token, hash_session_token
 from app.domains.tenants.models import Tenant, TenantStatus
+from app.domains.tenants.reminders import last_sign_ins
 from app.domains.tenants.repositories import SQLAlchemyTenantRepository
 from app.domains.tenants.schemas import (
     InvitationCreateCommand,
@@ -60,17 +68,33 @@ class MembershipConflictError(Exception):
     pass
 
 
+class RolePermissionError(Exception):
+    pass
+
+
 repository = SQLAlchemyTenantRepository()
 identity_repository = SQLAlchemyIdentityRepository()
 
-SYSTEM_ROLES = (
-    (
-        "tenant_admin",
-        "Tenant Administrator",
-        ["idea.create", "idea.view", "tenant.people.manage", "tenant.settings.manage"],
-    ),
-    ("idea_submitter", "Idea Submitter", ["idea.create", "idea.view"]),
-)
+
+def _require_manageable(actor_roles: list[str] | None, role_keys: list[str], action: str) -> None:
+    """Enforce the role ladder. ``actor_roles=None`` is platform administration."""
+    if actor_roles is None:
+        return
+    for key in role_keys:
+        if not can_manage_role(actor_roles, key):
+            name = ROLES_BY_KEY[key].name if key in ROLES_BY_KEY else "this role"
+            raise RolePermissionError(f"Only a Workspace Owner can {action} a {name}.")
+
+
+async def _ensure_owner_remains(
+    session: AsyncSession, tenant_id: uuid.UUID, membership_id: uuid.UUID
+) -> None:
+    owners = await repository.lock_active_owner_membership_ids(session, tenant_id)
+    if membership_id in owners and len(owners) <= 1:
+        raise MembershipConflictError(
+            "A workspace must keep at least one active Workspace Owner. "
+            "Make someone else an Owner first."
+        )
 
 
 async def _discard_queued_invitation_emails(
@@ -94,16 +118,16 @@ async def _create_system_roles(
     tenant_id: uuid.UUID,
 ) -> dict[str, Role]:
     roles: dict[str, Role] = {}
-    for key, name, permissions in SYSTEM_ROLES:
+    for definition in WORKSPACE_ROLES:
         role = Role(
             tenant_id=tenant_id,
-            key=key,
-            name=name,
-            permissions=permissions,
+            key=definition.key,
+            name=definition.name,
+            permissions=list(definition.permissions),
             is_system=True,
         )
         session.add(role)
-        roles[key] = role
+        roles[definition.key] = role
     await session.flush()
     return roles
 
@@ -206,7 +230,7 @@ async def list_platform_tenants(session: AsyncSession) -> list[PlatformTenantSum
             id=row["invitation_id"],
             email=row["email"],
             display_name=row["display_name"],
-            role_key=row["role_key"] or "tenant_admin",
+            role_key=row["role_key"] or WORKSPACE_OWNER,
             status=row["invitation_status"],
             expires_at=row["expires_at"],
             last_sent_at=row["last_sent_at"],
@@ -259,7 +283,7 @@ async def provision_tenant(
             email=email,
             display_name=command.first_admin_name,
             inviter=inviter,
-            role=roles["tenant_admin"],
+            role=roles[WORKSPACE_OWNER],
             settings=settings,
         )
     return TenantProvisionResult(
@@ -332,8 +356,17 @@ async def invite_member(
     async with session.begin():
         await apply_tenant_to_transaction(session, tenant_id)
         role = await repository.get_role(session, tenant_id, command.role_key)
-        if role is None:
+        if role is None or role.key not in ROLES_BY_KEY:
             raise RoleNotFoundError
+        _require_manageable(inviter.roles, [role.key], "invite")
+        user_id = await repository.ensure_invited_user(session, email, command.display_name)
+        existing = await repository.get_membership(session, tenant_id, user_id)
+        if existing is not None:
+            _require_manageable(
+                inviter.roles,
+                await identity_repository.get_role_keys(session, tenant_id, existing.id),
+                "re-invite",
+            )
         return await _queue_invitation(
             session,
             tenant_id=tenant_id,
@@ -349,34 +382,108 @@ async def invite_member(
 async def list_members(
     tenant_id: uuid.UUID,
     session: AsyncSession,
+    actor: SessionIdentity | None = None,
 ) -> list[TenantMemberSummary]:
     async with session.begin():
         await apply_tenant_to_transaction(session, tenant_id)
         members = await repository.list_members(session, tenant_id)
-        return [
-            TenantMemberSummary(
-                id=record.membership.id,
-                email=record.user.email,
-                display_name=record.user.display_name,
-                status=record.membership.status.value,
-                roles=await identity_repository.get_role_keys(
-                    session,
-                    tenant_id,
-                    record.membership.id,
-                ),
+        sign_ins = await last_sign_ins(session, tenant_id, [record.user.id for record in members])
+        summaries = []
+        for record in members:
+            role_keys = await identity_repository.get_role_keys(
+                session, tenant_id, record.membership.id
             )
-            for record in members
-        ]
+            summaries.append(
+                TenantMemberSummary(
+                    id=record.membership.id,
+                    email=record.user.email,
+                    display_name=record.user.display_name,
+                    status=record.membership.status.value,
+                    roles=role_keys,
+                    can_manage=actor is not None
+                    and record.user.id != actor.user.id
+                    and all(can_manage_role(actor.roles, key) for key in role_keys),
+                    last_signed_in_at=sign_ins.get(record.user.id),
+                )
+            )
+        return summaries
 
 
 async def list_roles(
     tenant_id: uuid.UUID,
     session: AsyncSession,
+    actor: SessionIdentity,
 ) -> list[TenantRoleSummary]:
     async with session.begin():
         await apply_tenant_to_transaction(session, tenant_id)
-        roles = await repository.list_roles(session, tenant_id)
-        return [TenantRoleSummary(key=role.key, name=role.name) for role in roles]
+        stored = {role.key for role in await repository.list_roles(session, tenant_id)}
+        return [
+            TenantRoleSummary(
+                key=definition.key,
+                name=definition.name,
+                description=definition.description,
+                rank=definition.rank,
+                assignable=can_manage_role(actor.roles, definition.key),
+            )
+            for definition in WORKSPACE_ROLES
+            if definition.key in stored
+        ]
+
+
+async def change_member_role(
+    tenant_id: uuid.UUID,
+    membership_id: uuid.UUID,
+    role_key: str,
+    actor: SessionIdentity,
+    session: AsyncSession,
+) -> TenantMemberSummary:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        record = await repository.get_membership_by_id(session, tenant_id, membership_id)
+        if record is None:
+            raise MembershipConflictError("Member was not found")
+        if record.user.id == actor.user.id:
+            raise MembershipConflictError("You cannot change your own role")
+        role = await repository.get_role(session, tenant_id, role_key)
+        if role is None or role.key not in ROLES_BY_KEY:
+            raise RoleNotFoundError
+        current = await identity_repository.get_role_keys(session, tenant_id, membership_id)
+        _require_manageable(actor.roles, current, "change the role of")
+        _require_manageable(actor.roles, [role.key], "assign the role of")
+        if current == [role.key]:
+            raise MembershipConflictError(f"This person is already a {role.name}")
+        if role.key != WORKSPACE_OWNER:
+            await _ensure_owner_remains(session, tenant_id, membership_id)
+        await session.execute(
+            delete(membership_roles).where(membership_roles.c.membership_id == membership_id)
+        )
+        await session.execute(
+            insert(membership_roles).values(membership_id=membership_id, role_id=role.id)
+        )
+        previous = ", ".join(ROLES_BY_KEY[key].name for key in current if key in ROLES_BY_KEY)
+        record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_user_id=actor.user.id,
+            subject_user_id=record.user.id,
+            event_type="member.role_changed",
+            entity_type="membership",
+            entity_id=membership_id,
+            entity_reference=record.user.email,
+            summary=(
+                f"{actor.user.display_name} changed {record.user.display_name}'s role "
+                f"from {previous or 'no role'} to {role.name}"
+            ),
+            details={"from": current, "to": role.key},
+        )
+        return TenantMemberSummary(
+            id=membership_id,
+            email=record.user.email,
+            display_name=record.user.display_name,
+            status=record.membership.status.value,
+            roles=[role.key],
+            can_manage=can_manage_role(actor.roles, role.key),
+        )
 
 
 def _invitation_summary(record: object, now: datetime) -> InvitationSummary:
@@ -416,12 +523,17 @@ async def resend_invitation(
     inviter: SessionIdentity,
     settings: Settings,
     session: AsyncSession,
+    *,
+    enforce_role_ladder: bool = True,
 ) -> InvitationResult:
     async with session.begin():
         await apply_tenant_to_transaction(session, tenant_id)
         record = await repository.get_invitation(session, tenant_id, invitation_id)
         if record is None:
             raise InvitationNotFoundError
+        _require_manageable(
+            inviter.roles if enforce_role_ladder else None, [record.role.key], "re-invite"
+        )
         tenant = await repository.get_tenant(session, tenant_id)
         if tenant is None or tenant.status == TenantStatus.REMOVED:
             raise TenantConflictError("The tenant cannot receive invitations")
@@ -441,12 +553,14 @@ async def revoke_invitation(
     tenant_id: uuid.UUID,
     invitation_id: uuid.UUID,
     session: AsyncSession,
+    actor_roles: list[str] | None = None,
 ) -> None:
     async with session.begin():
         await apply_tenant_to_transaction(session, tenant_id)
         record = await repository.get_invitation(session, tenant_id, invitation_id)
         if record is None:
             raise InvitationNotFoundError
+        _require_manageable(actor_roles, [record.role.key], "revoke the invitation of")
         record.invitation.revoked_at = datetime.now(UTC)
         await _discard_queued_invitation_emails(
             session,
@@ -463,6 +577,8 @@ async def change_membership_status(
     new_status: MembershipStatus,
     actor: SessionIdentity,
     session: AsyncSession,
+    *,
+    enforce_role_ladder: bool = True,
 ) -> None:
     now = datetime.now(UTC)
     async with session.begin():
@@ -472,6 +588,14 @@ async def change_membership_status(
             raise MembershipConflictError("Member was not found")
         if record.user.id == actor.user.id and new_status != MembershipStatus.ACTIVE:
             raise MembershipConflictError("You cannot deactivate your own membership")
+        if enforce_role_ladder:
+            _require_manageable(
+                actor.roles,
+                await identity_repository.get_role_keys(session, tenant_id, membership_id),
+                "change access for",
+            )
+            if new_status != MembershipStatus.ACTIVE:
+                await _ensure_owner_remains(session, tenant_id, membership_id)
         if new_status == MembershipStatus.ACTIVE and record.user.password_hash is None:
             raise MembershipConflictError("This person must accept an invitation first")
         record.membership.status = new_status

@@ -5,23 +5,26 @@ import { useEffect, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import styles from "./profile-avatar.module.css";
 
+// Remembered for the page session so every navigation does not re-request a photo that does not exist.
+let photoKnownMissing = false;
+
 export function ProfileAvatar({ name, size = "standard", hasPhoto }: { name: string; size?: "standard" | "large"; hasPhoto?: boolean }) {
   const [photoUrl, setPhotoUrl] = useState("");
   const [revision, setRevision] = useState(0);
 
   useEffect(() => {
-    const refresh = () => setRevision(Date.now());
+    const refresh = () => { photoKnownMissing = false; setRevision(Date.now()); };
     window.addEventListener("transpire:profile-photo-updated", refresh);
     return () => window.removeEventListener("transpire:profile-photo-updated", refresh);
   }, []);
 
   useEffect(() => {
-    if (hasPhoto === false) return;
+    if (hasPhoto === false || (hasPhoto === undefined && photoKnownMissing)) return;
     let active = true;
     let objectUrl = "";
     apiRequest(`/profile/photo?v=${revision}`)
       .then(async (response) => {
-        if (!response.ok) { if (active) setPhotoUrl(""); return; }
+        if (!response.ok) { if (response.status === 404) photoKnownMissing = true; if (active) setPhotoUrl(""); return; }
         objectUrl = URL.createObjectURL(await response.blob());
         if (active) setPhotoUrl(objectUrl);
       })

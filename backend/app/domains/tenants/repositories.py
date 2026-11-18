@@ -4,9 +4,11 @@ from dataclasses import dataclass
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.domains.identity.access import WORKSPACE_OWNER
 from app.domains.identity.models import (
     InvitationToken,
     Membership,
+    MembershipStatus,
     Role,
     User,
     membership_roles,
@@ -185,6 +187,30 @@ class SQLAlchemyTenantRepository:
             (
                 await session.scalars(
                     select(Role).where(Role.tenant_id == tenant_id).order_by(Role.name)
+                )
+            ).all()
+        )
+
+    async def lock_active_owner_membership_ids(
+        self,
+        session: AsyncSession,
+        tenant_id: uuid.UUID,
+    ) -> set[uuid.UUID]:
+        """Active Workspace Owners, row-locked so concurrent demotions serialise."""
+        return set(
+            (
+                await session.scalars(
+                    select(Membership.id)
+                    .join(membership_roles, membership_roles.c.membership_id == Membership.id)
+                    .join(Role, Role.id == membership_roles.c.role_id)
+                    .where(
+                        Membership.tenant_id == tenant_id,
+                        Membership.status == MembershipStatus.ACTIVE,
+                        Role.tenant_id == tenant_id,
+                        Role.key == WORKSPACE_OWNER,
+                    )
+                    .order_by(Membership.id)
+                    .with_for_update(of=Membership)
                 )
             ).all()
         )

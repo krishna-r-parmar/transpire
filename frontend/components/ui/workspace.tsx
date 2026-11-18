@@ -5,6 +5,7 @@ import styles from "./workspace.module.css";
 type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 
 type SectionCardProps = {
+  id?: string;
   icon?: ReactNode;
   title: string;
   description?: string;
@@ -16,9 +17,9 @@ type SectionCardProps = {
   children: ReactNode;
 };
 
-export function SectionCard({ icon, title, description, meta, actions, tinted = false, flush = false, className, children }: SectionCardProps) {
+export function SectionCard({ id, icon, title, description, meta, actions, tinted = false, flush = false, className, children }: SectionCardProps) {
   const headingId = useId();
-  return <section className={[styles.card, className].filter(Boolean).join(" ")} data-tone={tinted ? "tinted" : undefined} aria-labelledby={headingId}>
+  return <section id={id} className={[styles.card, className].filter(Boolean).join(" ")} data-tone={tinted ? "tinted" : undefined} aria-labelledby={headingId}>
     <header className={styles.cardHead}>
       {icon ? <span className={styles.cardIcon} aria-hidden="true">{icon}</span> : null}
       <div className={styles.cardTitle}><h2 id={headingId}>{title}</h2>{description ? <p>{description}</p> : null}</div>
@@ -29,12 +30,13 @@ export function SectionCard({ icon, title, description, meta, actions, tinted = 
   </section>;
 }
 
-export type SummaryItem = { icon: ReactNode; value: ReactNode; label: string; note?: string; tone?: Tone; href?: string };
+export type SummaryItem = { icon: ReactNode; value: ReactNode; label: string; note?: string; tone?: Tone; href?: string; onClick?: () => void; pressed?: boolean };
 
 export function SummaryStrip({ items, label = "Summary" }: { items: SummaryItem[]; label?: string }) {
   return <section className={styles.summary} aria-label={label}>
     {items.map((item) => {
       const content = <><span className={styles.summaryIcon} aria-hidden="true">{item.icon}</span><span><strong>{item.value}</strong><span className={styles.summaryLabel}>{item.label}</span>{item.note ? <span className={styles.summaryNote}>{item.note}</span> : null}</span></>;
+      if (item.onClick) return <button key={item.label} type="button" className={styles.summaryItem} onClick={item.onClick} aria-pressed={item.pressed} data-tone={item.tone}>{content}</button>;
       return item.href
         ? <Link key={item.label} className={styles.summaryItem} href={item.href} data-tone={item.tone}>{content}</Link>
         : <div key={item.label} className={styles.summaryItem} data-tone={item.tone}>{content}</div>;

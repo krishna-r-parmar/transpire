@@ -1,0 +1,21 @@
+/* Journey: submission to delivery on one line, wrapping on small screens */
+.journey { display: flex; flex-wrap: wrap; gap: .5rem 0; margin: 0 0 1.75rem; padding: 0; list-style: none; }
+.step { position: relative; display: flex; min-width: 9rem; flex: 1 1 0; align-items: flex-start; gap: .55rem; padding-right: 1rem; }
+.step:not(:last-child)::after { position: absolute; top: .8rem; right: .25rem; left: 2.15rem; height: 2px; border-radius: 2px; background: var(--line); content: ""; }
+.step[data-state="done"]:not(:last-child)::after { background: var(--tp-success-line); }
+.step > span { position: relative; z-index: 1; display: grid; width: 1.6rem; height: 1.6rem; flex: 0 0 auto; border-radius: 50%; place-items: center; background: var(--panel); color: var(--subtle); }
+.step[data-state="done"] > span { background: var(--tp-success-soft); color: var(--tp-success); }
+.step[data-state="current"] > span { background: var(--blue); color: var(--on-accent); }
+.step[data-state="returned"] > span { background: var(--tp-warning-soft); color: var(--tp-warning); }
+.step[data-state="rejected"] > span { background: var(--tp-danger-soft); color: var(--tp-danger); }
+.step > div { position: relative; z-index: 1; min-width: 0; margin-top: 1.9rem; margin-left: -2.15rem; }
+.label { display: block; color: var(--muted); font-size: var(--tp-text-sm); font-weight: 600; line-height: 1.3; }
+.step[data-state="current"] strong, .step[data-state="returned"] strong { color: var(--ink); font-weight: 700; }
+.detail { display: block; margin-top: .1rem; overflow: hidden; color: var(--muted); font-size: var(--tp-text-xs); text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 40rem) {
+  .journey { flex-direction: column; gap: .75rem; }
+  .step { min-width: 0; align-items: center; }
+  .step:not(:last-child)::after { display: none; }
+  .step > div { margin: 0; }
+}
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }

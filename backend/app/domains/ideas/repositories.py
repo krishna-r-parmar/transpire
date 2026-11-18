@@ -63,6 +63,34 @@ class SQLAlchemyIdeaRepository:
         )
         return list((await session.execute(statement)).all())
 
+    async def get_summary_row(
+        self, session: AsyncSession, tenant_id: uuid.UUID, idea_id: uuid.UUID
+    ):
+        category = aliased(ConfigurationItem)
+        subcategory = aliased(ConfigurationItem)
+        process_area = aliased(ConfigurationItem)
+        site = aliased(ConfigurationItem)
+        department = aliased(ConfigurationItem)
+        statement: Select = (
+            select(
+                Idea,
+                User.display_name,
+                category.name,
+                subcategory.name,
+                process_area.name,
+                site.name,
+                department.name,
+            )
+            .join(User, User.id == Idea.submitter_user_id)
+            .outerjoin(category, category.id == Idea.category_id)
+            .outerjoin(subcategory, subcategory.id == Idea.subcategory_id)
+            .outerjoin(process_area, process_area.id == Idea.process_area_id)
+            .outerjoin(site, site.id == Idea.site_id)
+            .outerjoin(department, department.id == Idea.department_id)
+            .where(Idea.tenant_id == tenant_id, Idea.id == idea_id)
+        )
+        return (await session.execute(statement)).first()
+
     async def get_policy(
         self, session: AsyncSession, tenant_id: uuid.UUID, *, lock: bool = False
     ) -> IdeaBankPolicy | None:

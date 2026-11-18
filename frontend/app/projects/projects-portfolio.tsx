@@ -1,17 +1,6 @@
 "use client";
 
-import {
-  AlertTriangle,
-  ArrowRight,
-  CheckCircle2,
-  FolderKanban,
-  IndianRupee,
-  OctagonAlert,
-  RefreshCw,
-  SearchCheck,
-  SlidersHorizontal,
-  X,
-} from "lucide-react";
+import { AlertTriangle, ArrowRight, CheckCircle2, FilePen, FolderKanban, IndianRupee, OctagonAlert, RefreshCw, SearchCheck, SlidersHorizontal, X } from "lucide-react";
 import { TenantLink as Link } from "@/components/app/tenant-link";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -78,6 +67,7 @@ export function ProjectsPortfolio() {
   );
   const financials = useMemo(() => summarizeFinancials(visible), [visible]);
   const portfolio = useMemo(() => summarizeFinancials(projects), [projects]);
+  const isEmpty = !loadingProjects && !error && projects.length === 0;
   const filtersActive = Boolean(query || status || health || site || department);
   const active = projects.filter((project) =>
     ["ready_to_start", "in_progress", "on_hold"].includes(project.status),
@@ -89,6 +79,7 @@ export function ProjectsPortfolio() {
     ["completion_review", "oe_verified", "finance_validation"].includes(project.status),
   ).length;
   const success = projects.filter((project) => project.status === "success").length;
+  const chartering = projects.filter((project) => project.status === "charter_in_progress").length;
 
   const clearFilters = () => {
     setQuery("");
@@ -106,14 +97,14 @@ export function ProjectsPortfolio() {
     <AdminShell
       session={session}
       active="projects"
-      eyebrow="Workspace"
       title="Projects"
       description="Track implementation, benefits and completion across the organisation."
     >
-      {!loadingProjects && !error ? (
+      {!loadingProjects && !error && projects.length ? (
         <SummaryStrip
           label="Project portfolio summary"
           items={[
+            { icon: <FilePen size={18} />, value: chartering, label: "Charter in progress", note: "Approved, charter not yet submitted", tone: chartering ? "info" : undefined },
             { icon: <FolderKanban size={18} />, value: active, label: "Active", note: "Ready, in progress or on hold" },
             { icon: <CheckCircle2 size={18} />, value: onTrack, label: "On track", tone: "success" },
             { icon: <AlertTriangle size={18} />, value: atRisk, label: "At risk", note: "Need attention", tone: "warning" },
@@ -133,10 +124,10 @@ export function ProjectsPortfolio() {
         </div>
       ) : null}
 
+      {isEmpty ? null : (
       <SectionCard
         icon={<SlidersHorizontal size={17} />}
-        title="Find project work"
-        description="Filter by delivery state or organisation, then compare forecast value."
+        title="Find projects"
         actions={filtersActive ? (
           <button className={styles.clear} type="button" onClick={clearFilters}>
             <X aria-hidden="true" size={14} />
@@ -226,13 +217,13 @@ export function ProjectsPortfolio() {
           </dl>
         </section>
       </SectionCard>
+      )}
 
       <SectionCard
         className={styles.results}
         icon={<FolderKanban size={17} />}
         title="Project portfolio"
-        description="Open a project for its milestones, benefits, charter and team."
-        meta={loadingProjects ? undefined : `${visible.length} shown`}
+        meta={loadingProjects || isEmpty ? undefined : `${visible.length} shown`}
         flush
       >
         {loadingProjects ? (
@@ -263,7 +254,7 @@ export function ProjectsPortfolio() {
                     <tr key={project.id}>
                       <td data-label="Project">
                         <span className={styles.reference}>{project.reference}</span>
-                        <Link className={styles.projectLink} href={`/projects/${project.id}`}>{project.title}</Link>
+                        <Link className={styles.projectLink} href={project.status === "charter_in_progress" ? `/projects/${project.id}/charter` : `/projects/${project.id}`}>{project.title}</Link>
                         <small>{project.lead_name || "Lead not recorded"}</small>
                         <small>
                           {[project.site, project.department].filter(Boolean).join(" · ")
@@ -275,7 +266,7 @@ export function ProjectsPortfolio() {
                           <ProjectStatusPill status={project.status} />
                           <HealthPill health={project.health} />
                         </div>
-                        <small>Baseline v{project.baseline_version} · {formatCompletionDate(project.target_completion_date)}</small>
+                        <small>{project.status === "charter_in_progress" ? "Charter draft" : `Baseline v${project.baseline_version}`} · {formatCompletionDate(project.target_completion_date)}</small>
                       </td>
                       <td data-label="Milestones">
                         <div className={styles.barRow}>
@@ -296,7 +287,7 @@ export function ProjectsPortfolio() {
                       <MoneyCell label="Projected" value={project.projected_outcome} />
                       <td className={styles.open}>
                         <Link
-                          href={`/projects/${project.id}`}
+                          href={project.status === "charter_in_progress" ? `/projects/${project.id}/charter` : `/projects/${project.id}`}
                           aria-label={`Open project workspace for ${project.reference}`}
                         >
                           <ArrowRight aria-hidden="true" size={16} />
@@ -313,11 +304,11 @@ export function ProjectsPortfolio() {
         {!loadingProjects && !visible.length ? (
           <div className={styles.empty}>
             <FolderKanban aria-hidden="true" size={26} />
-            <h3>{projects.length ? "No projects match these filters." : "Approved work will appear here."}</h3>
+            <h3>{projects.length ? "No projects match these filters." : "No projects yet."}</h3>
             <p>
               {projects.length
                 ? "Clear a filter or try a broader search."
-                : "Submitting an approved project charter publishes its first baseline and creates the execution workspace."}
+                : "A project is created when an approved idea's charter is submitted."}
             </p>
             {projects.length ? (
               <button type="button" onClick={clearFilters}>Clear filters</button>

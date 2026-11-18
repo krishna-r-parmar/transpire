@@ -1,6 +1,7 @@
 "use client";
 
-import { BellRing, Camera, Check, FileClock, LogOut, Save, Trash2, TrendingUp, UserRound } from "lucide-react";
+import { isWorkspaceAdmin, roleNames } from "@/lib/roles";
+import { BellRing, Camera, FileClock, LogOut, Save, Trash2, TrendingUp, UserRound } from "lucide-react";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
@@ -96,7 +97,7 @@ export function ProfileWorkspace() {
 
   if (sessionLoading || !session || !profile || !settings) return <main className={styles.loading} aria-busy="true">Preparing your profile…</main>;
 
-  return <AdminShell session={session} active="profile" eyebrow="Account" title="Profile" description="Keep your identity current, choose how TRANSPIRE communicates with you, and see the improvement habit you are building.">
+  return <AdminShell session={session} active="profile" title="Profile" description="Keep your identity current, choose how TRANSPIRE communicates with you, and see the improvement habit you are building.">
     {notice ? <DismissibleNotice tone={notice.tone} onDismiss={() => setNotice(null)}>{notice.text}</DismissibleNotice> : null}
     <form className={styles.layout} onSubmit={(event) => void save(event)}>
       <div className={styles.stack}>
@@ -107,7 +108,7 @@ export function ProfileWorkspace() {
               <label className={styles.field}><span>Display name</span><input value={name} minLength={2} maxLength={200} required onChange={(event) => setName(event.target.value)} /></label>
               <div className={styles.readOnly}><span>Email address</span><strong>{profile.email}</strong><small>Managed by your authenticated account.</small></div>
             </div>
-            <dl className={styles.facts}><div><dt>Organisation</dt><dd>{profile.tenant_name}</dd></div><div><dt>Access</dt><dd>{profile.roles.length ? profile.roles.map(labelRole).join(", ") : "Contributor"}</dd></div></dl>
+            <dl className={styles.facts}><div><dt>Organisation</dt><dd>{profile.tenant_name}</dd></div><div><dt>Access</dt><dd>{roleNames(profile.roles)}</dd></div></dl>
           </div>
         </SectionCard>
         <SectionCard icon={<BellRing size={17} />} title="Notifications and workspace" description="Choose how TRANSPIRE communicates with you and how lists appear.">
@@ -121,14 +122,14 @@ export function ProfileWorkspace() {
         </SectionCard>
       </div>
       <SectionCard className={styles.rhythm} icon={<TrendingUp size={17} />} title="Your improvement rhythm" description="Ideas submitted during the last 365 days." tinted>
-        <dl className={styles.totals}><div><dt>Submitted</dt><dd>{profile.submitted_ideas}</dd></div><div><dt>Including drafts</dt><dd>{profile.total_ideas}</dd></div></dl>
+        <dl className={styles.totals}><div><dt>Submitted</dt><dd>{profile.submitted_ideas}</dd></div>{profile.total_ideas > profile.submitted_ideas ? <div><dt>Drafts</dt><dd>{profile.total_ideas - profile.submitted_ideas}</dd></div> : null}</dl>
         <div className={styles.graphFrame}><div className={styles.graph} aria-label="Idea contributions over the last year">{weeks.map((day, index) => day ? <span key={day.date} data-level={Math.min(day.count, 4)} title={`${day.date}: ${day.count} ${day.count === 1 ? "idea" : "ideas"}`} aria-label={`${day.date}: ${day.count} ${day.count === 1 ? "idea" : "ideas"}`} /> : <i key={`blank-${index}`} />)}</div></div>
         <div className={styles.legend}><span>Less</span>{[0, 1, 2, 3, 4].map((level) => <i key={level} data-level={level} />)}<span>More</span></div>
-        <p className={styles.graphNote}><Check size={16} />Drafts are counted in your total, while the graph records completed submissions.</p>
+        
       </SectionCard>
     </form>
-    {session.roles.includes("tenant_admin") ? null : <section className={styles.auditSection} id="audit-log" aria-labelledby="profile-audit-title">
-      <header><span aria-hidden="true"><FileClock size={18} /></span><div><p>Accountability</p><h2 id="profile-audit-title">Audit log</h2><span>{session.roles.includes("tenant_admin") ? "Review governed activity across this organisation." : "Review events you performed or that affected your submissions."}</span></div></header>
+    {isWorkspaceAdmin(session.roles) ? null : <section className={styles.auditSection} id="audit-log" aria-labelledby="profile-audit-title">
+      <header><span aria-hidden="true"><FileClock size={18} /></span><div><p>Accountability</p><h2 id="profile-audit-title">Audit log</h2><span>{isWorkspaceAdmin(session.roles) ? "Review governed activity across this organisation." : "Review events you performed or that affected your submissions."}</span></div></header>
       <AuditLog session={session} embedded />
     </section>}
   </AdminShell>;
@@ -138,4 +139,3 @@ function Preference({ label, description, value, onChange }: { label: string; de
   return <button className={styles.preference} type="button" aria-pressed={value} onClick={() => onChange(!value)}><span><strong>{label}</strong><small>{description}</small></span><i data-on={value}><b /></i></button>;
 }
 
-function labelRole(role: string) { return role.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" "); }

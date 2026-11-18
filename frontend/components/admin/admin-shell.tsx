@@ -26,7 +26,7 @@ type AdminShellProps = AppFrameProps & {
   /** Area label above the title. Administration pages show their breadcrumb instead. */
   eyebrow?: string;
   title: string;
-  description: string;
+  description?: string;
   actions?: ReactNode;
 };
 
@@ -40,7 +40,7 @@ export function AdminShell({ session, active, eyebrow, title, description, actio
             ? <nav className={styles.breadcrumb} aria-label="Breadcrumb"><ol>{adminBreadcrumb(active).map((crumb) => <li key={crumb}>{crumb}</li>)}</ol></nav>
             : eyebrow ? <p>{eyebrow}</p> : null}
           <h1>{title}</h1>
-          <span>{description}</span>
+          {description ? <span>{description}</span> : null}
         </div>
         {actions ? <div className={styles.pageActions}>{actions}</div> : null}
       </header>

@@ -123,6 +123,13 @@ async def test_admin_check_in_reminders_permissions_eligibility_and_cooldown() -
         assert by_email[member_email]["cooldown_until"] is None
         member_id = by_email[member_email]["membership_id"]
 
+        # The People directory carries the same last sign-in for every member.
+        directory = await admin.get(f"{tenant_prefix}/admin/members")
+        assert directory.status_code == 200, directory.text
+        directory_by_email = {row["email"]: row for row in directory.json()}
+        assert directory_by_email[admin_email]["last_signed_in_at"] is not None
+        assert directory_by_email[member_email]["last_signed_in_at"] is None
+
         inactive = await admin.get(
             f"{tenant_prefix}/admin/check-in-reminders", params={"inactive_days": 30}
         )

@@ -19,7 +19,7 @@ type Confirmation = { title: string; description: string; confirmLabel: string; 
 
 export function SignInConsole({ returnedFromSSOValidation = false }: { returnedFromSSOValidation?: boolean }) {
   const router = useRouter();
-  const { session, loading } = useAdminSession();
+  const { session, loading } = useAdminSession("owner");
   const [loaded, setLoaded] = useState(false);
   const [sso, setSSO] = useState<SSOConfiguration | null>(null);
   const [message, setMessage] = useState(returnedFromSSOValidation ? "Microsoft sign-in was validated with your tenant administrator account." : "");

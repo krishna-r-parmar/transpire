@@ -1,4 +1,4 @@
-.loading { display: grid; min-height: 100svh; place-content: center; background: oklch(98.5% .006 240); color: oklch(45% .03 248); font-size: .875rem; font-weight: 750; }
+.loading { display: grid; min-height: 100svh; place-content: center; background: var(--field); color: var(--muted); font-size: var(--tp-text-sm); font-weight: 750; }
 .headerPills { display: flex; flex-wrap: wrap; gap: .4rem; }
 .workspaceLead { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin: -1rem 0 1.25rem; }
 .workspaceLead a { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .4rem; color: var(--blue-deep); font-size: var(--tp-text-sm); font-weight: 760; text-decoration: none; }
@@ -13,7 +13,7 @@
 .tabs button:focus-visible { outline: 2px solid var(--blue); outline-offset: -2px; color: var(--blue-deep); }
 .panel { min-width: 0; }
 
-.primaryButton, .addMilestone, .planToolbar button, .actionEditor header button { display: inline-flex; min-height: 2.75rem; cursor: pointer; align-items: center; justify-content: center; gap: .38rem; border: 1px solid var(--blue); border-radius: .25rem; padding: .5rem .9rem; background: var(--blue); color: oklch(98% .008 242); font-size: var(--tp-text-sm); font-weight: 760; }
+.primaryButton, .addMilestone, .planToolbar button, .actionEditor header button { display: inline-flex; min-height: 2.75rem; cursor: pointer; align-items: center; justify-content: center; gap: .38rem; border: 1px solid var(--blue); border-radius: .25rem; padding: .5rem .9rem; background: var(--blue); color: var(--on-accent); font-size: var(--tp-text-sm); font-weight: 760; }
 .primaryButton:hover, .addMilestone:hover { background: var(--blue-deep); }
 .planToolbar { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border: 1px solid var(--line); border-radius: .3rem; margin-bottom: 1rem; padding: .65rem .9rem; background: var(--panel); color: var(--muted); font-size: var(--tp-text-sm); }
 .planToolbar > span strong { color: var(--ink); font-variant-numeric: tabular-nums; }
@@ -57,7 +57,7 @@
 .overviewGrid > section, .charterGrid > section { margin-top: 0 !important; }
 .scopeGrid { display: grid; gap: .75rem; margin-top: .75rem; }
 .readOnly { border: 1px solid var(--line); border-radius: .3rem; padding: .85rem 1rem; background: var(--panel); }
-.readOnly span { color: var(--muted); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.readOnly span { color: var(--muted); font-size: var(--tp-text-xs); font-weight: 800; }
 .readOnly p { max-width: 72ch; margin: .3rem 0 0; color: var(--ink); font-size: var(--tp-text-md); line-height: 1.55; white-space: pre-wrap; }
 .facts { display: grid; gap: 0; margin: 0; }
 .facts > div { display: flex; min-height: 2.9rem; align-items: center; justify-content: space-between; gap: 1rem; border-bottom: 1px solid var(--line); padding: .45rem 0; }
@@ -75,8 +75,8 @@
 .progressTrack span { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
 
 .tableWrap { overflow-x: auto; }
-.tableWrap > table { width: 100%; min-width: 50rem; border-collapse: collapse; font-size: .9rem; }
-.tableWrap > table > thead th { padding: .7rem 1rem; background: var(--panel); color: var(--muted); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.tableWrap > table { width: 100%; min-width: 50rem; border-collapse: collapse; font-size: var(--tp-text-sm); }
+.tableWrap > table > thead th { padding: .7rem 1rem; background: var(--panel); color: var(--muted); font-size: var(--tp-text-xs); font-weight: 800; text-align: left; white-space: nowrap; }
 .tableWrap > table > tbody > tr > td, .tableWrap > table > tbody > tr > th { border-top: 1px solid var(--line); padding: .85rem 1rem; text-align: left; vertical-align: middle; }
 .tableWrap > table > tbody > tr > th { font-weight: 760; white-space: nowrap; }
 .tableWrap > table > tbody > tr:not(.detailRow):hover > td, .tableWrap > table > tbody > tr:not(.detailRow):hover > th { background: var(--paper); }
@@ -101,8 +101,8 @@
 .milestoneDetail { display: grid; gap: .9rem; padding: 1.1rem 1.25rem 1.25rem; }
 .milestoneDetail .readOnly { background: var(--tp-surface); }
 .actionTable { overflow-x: auto; border: 1px solid var(--line); border-radius: .3rem; background: var(--tp-surface); }
-.actionTable table { width: 100%; min-width: 36rem; border-collapse: collapse; font-size: .9rem; }
-.actionTable th { padding: .6rem .9rem; color: var(--muted); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-align: left; text-transform: uppercase; }
+.actionTable table { width: 100%; min-width: 36rem; border-collapse: collapse; font-size: var(--tp-text-sm); }
+.actionTable th { padding: .6rem .9rem; color: var(--muted); font-size: var(--tp-text-xs); font-weight: 800; text-align: left; }
 .actionTable td { border-top: 1px solid var(--line); padding: .65rem .9rem; vertical-align: middle; }
 .inlineEmpty { margin: 0; color: var(--muted); font-size: var(--tp-text-sm); }
 
@@ -114,7 +114,7 @@
 
 .teamLead { display: flex; align-items: center; gap: .9rem; padding: 1rem 1.25rem; background: var(--panel); }
 .teamLead > span { display: grid; width: 2.6rem; height: 2.6rem; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--tp-blue-soft); color: var(--blue-deep); }
-.teamLead small { display: block; color: var(--blue-deep); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.teamLead small { display: block; color: var(--blue-deep); font-size: var(--tp-text-xs); font-weight: 800; }
 .teamLead h3 { margin: .1rem 0 0; font-size: var(--tp-text-lg); }
 .teamLead div > span { display: block; margin-top: .15rem; color: var(--muted); font-size: var(--tp-text-sm); }
 .teamList { display: grid; }
@@ -141,7 +141,7 @@
 .error > div { display: flex; flex-wrap: wrap; justify-content: center; gap: .5rem; }
 .error a, .error button { display: inline-flex; min-height: 2.75rem; cursor: pointer; align-items: center; gap: .35rem; border: 1px solid var(--tp-line-strong); border-radius: .25rem; padding: .5rem .85rem; background: transparent; color: var(--blue-deep); font-size: var(--tp-text-sm); font-weight: 760; text-decoration: none; }
 .skeleton { display: grid; gap: .5rem; }
-.skeleton span { height: 5rem; border-radius: .25rem; background: oklch(93% .015 242); animation: pulse 800ms ease-in-out infinite alternate; }
+.skeleton span { height: 5rem; border-radius: .25rem; background: var(--hover); animation: pulse 800ms ease-in-out infinite alternate; }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 @keyframes pulse { to { opacity: .45; } }
 @media (min-width: 48rem) {

@@ -13,14 +13,14 @@ import shared from "../admin.module.css";
 import styles from "../configuration.module.css";
 import register from "@/components/admin/admin-register.module.css";
 
-type IdeaBankPolicy = { detail_level: "headline" | "operational" | "full"; show_contributor: boolean; show_financials: boolean };
+type IdeaBankPolicy = { detail_level: "headline" | "operational" | "full"; show_financials: boolean };
 type Confirmation = { title: string; description: string; confirmLabel: string; run: () => Promise<void> };
 
 export function IdeaBankPolicyConsole() {
   const router = useRouter();
   const { session, loading } = useAdminSession();
   const [loaded, setLoaded] = useState(false);
-  const [ideaBankPolicy, setIdeaBankPolicy] = useState<IdeaBankPolicy>({ detail_level: "operational", show_contributor: true, show_financials: false });
+  const [ideaBankPolicy, setIdeaBankPolicy] = useState<IdeaBankPolicy>({ detail_level: "operational", show_financials: false });
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
@@ -81,7 +81,7 @@ function IdeaBankPolicyEditor({ policy, onChange, onSave, busy }: { policy: Idea
     { value: "operational", label: "Operational", description: "Adds subcategory, process area, SQDCP, baseline, and target." },
     { value: "full", label: "Full context", description: "Also shares the problem statement and business case." },
   ];
-  return <SectionCard className={styles.policy} icon={<Eye size={17} />} title="Decide what the Idea Bank reveals." description="The backend applies this policy before idea data leaves the tenant boundary." meta="Tenant sharing policy"><fieldset><legend>Detail level</legend><div className={styles.choices}>{levels.map((level) => <button key={level.value} type="button" aria-pressed={policy.detail_level === level.value} onClick={() => onChange({ ...policy, detail_level: level.value })}><span><strong>{level.label}</strong><small>{level.description}</small></span>{policy.detail_level === level.value ? <span className={styles.selected}><CheckMark /></span> : null}</button>)}</div></fieldset><div className={styles.policyToggles}><button type="button" aria-pressed={policy.show_contributor} onClick={() => onChange({ ...policy, show_contributor: !policy.show_contributor })}><span><strong>Show contributor name</strong><small>Turn off to share ideas anonymously.</small></span><span className={styles.switch}><em aria-hidden="true">{policy.show_contributor ? "On" : "Off"}</em><i data-on={policy.show_contributor}><b /></i></span></button><button type="button" aria-pressed={policy.show_financials} onClick={() => onChange({ ...policy, show_financials: !policy.show_financials })}><span><strong>Show financial estimates</strong><small>Annual saving, cost avoidance, and investment.</small></span><span className={styles.switch}><em aria-hidden="true">{policy.show_financials ? "On" : "Off"}</em><i data-on={policy.show_financials}><b /></i></span></button></div><button className={styles.policySave} type="button" onClick={onSave} disabled={busy}><Save size={16} />{busy ? "Saving policy" : "Save visibility policy"}</button></SectionCard>;
+  return <SectionCard className={styles.policy} icon={<Eye size={17} />} title="Decide what the Idea Bank reveals." description="Owner and team names are always shown so colleagues can find improvements and ask to join. This policy limits detail and financials." meta="Tenant sharing policy"><fieldset><legend>Detail level</legend><div className={styles.choices}>{levels.map((level) => <button key={level.value} type="button" aria-pressed={policy.detail_level === level.value} onClick={() => onChange({ ...policy, detail_level: level.value })}><span><strong>{level.label}</strong><small>{level.description}</small></span>{policy.detail_level === level.value ? <span className={styles.selected}><CheckMark /></span> : null}</button>)}</div></fieldset><div className={styles.policyToggles}><button type="button" aria-pressed={policy.show_financials} onClick={() => onChange({ ...policy, show_financials: !policy.show_financials })}><span><strong>Show financial estimates</strong><small>Annual saving, cost avoidance, and investment.</small></span><span className={styles.switch}><em aria-hidden="true">{policy.show_financials ? "On" : "Off"}</em><i data-on={policy.show_financials}><b /></i></span></button></div><button className={styles.policySave} type="button" onClick={onSave} disabled={busy}><Save size={16} />{busy ? "Saving policy" : "Save visibility policy"}</button></SectionCard>;
 }
 
 function CheckMark() { return <span aria-hidden="true">✓</span>; }

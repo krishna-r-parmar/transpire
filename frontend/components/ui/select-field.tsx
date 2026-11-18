@@ -90,7 +90,7 @@ export function SelectField({ id, label, name, value, options, onChange, disable
           }
         }}
       >
-        <span id={`${id}-value`}><strong>{selected?.label ?? "Select a role"}</strong><small>{selected?.description ?? "Choose initial access"}</small></span>
+        <span id={`${id}-value`}><strong>{selected?.label ?? "No options available"}</strong>{selected?.description ? <small>{selected.description}</small> : null}</span>
         <ChevronDown aria-hidden="true" size={17} />
       </button>
       <div className={styles.selectMenu} data-open={open}>

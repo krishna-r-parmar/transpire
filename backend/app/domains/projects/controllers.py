@@ -1,5 +1,5 @@
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import delete, func, select
@@ -15,15 +15,25 @@ from app.domains.communications.controllers import enqueue_email
 from app.domains.communications.schemas import EmailMessage
 from app.domains.configuration.models import ConfigurationItem
 from app.domains.ideas.models import Idea, ProjectCharter
+from app.domains.identity.access import can_contribute, is_workspace_admin
 from app.domains.identity.models import Membership, MembershipStatus, User
+from app.domains.identity.queries import contributing_membership
 from app.domains.projects.models import (
     Project,
     ProjectAction,
+    ProjectBenefitMonth,
     ProjectCharterBaseline,
     ProjectMilestone,
+    ProjectStatus,
     ProjectTeamMember,
 )
 from app.domains.projects.schemas import (
+    BenefitMonthCommand,
+    BenefitReviewCommand,
+    BenefitTrackingRecord,
+    MilestoneCreateCommand,
+    MilestoneMoveCommand,
+    MilestonePatchCommand,
     ProjectActionRecord,
     ProjectActivityRecord,
     ProjectBaselineRecord,
@@ -35,6 +45,8 @@ from app.domains.projects.schemas import (
     ProjectTeamCandidate,
     ProjectTeamMemberRecord,
     ProjectWorkspaceRecord,
+    TaskCreateCommand,
+    TaskPatchCommand,
 )
 
 
@@ -44,6 +56,10 @@ class ProjectNotFoundError(Exception):
 
 class ProjectAccessError(Exception):
     pass
+
+
+class ProjectValidationError(Exception):
+    """A change that can't be made as sent; the message is safe to show."""
 
 
 def _money(value: object) -> Decimal:
@@ -56,7 +72,9 @@ def _money(value: object) -> Decimal:
 def charter_snapshot(charter: ProjectCharter) -> dict[str, object]:
     return {
         "sponsor": charter.sponsor,
+        "sponsor_user_id": str(charter.sponsor_user_id) if charter.sponsor_user_id else None,
         "leader": charter.leader,
+        "leader_user_id": str(charter.leader_user_id) if charter.leader_user_id else None,
         "department_id": str(charter.department_id) if charter.department_id else None,
         "site_id": str(charter.site_id) if charter.site_id else None,
         "start_date": charter.start_date.isoformat() if charter.start_date else None,
@@ -76,8 +94,38 @@ def charter_snapshot(charter: ProjectCharter) -> dict[str, object]:
         "impact_areas": charter.impact_areas,
         "belt_level": charter.belt_level,
         "action_items": charter.action_items,
+        "milestone_plan": charter.milestone_plan or [],
         "monthly_tracking": charter.monthly_tracking,
     }
+
+
+async def open_project_for_approved_idea(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    idea_id: uuid.UUID,
+    idea_reference: str,
+    charter: ProjectCharter,
+) -> Project:
+    """Create the project as soon as an idea is approved, so it shows in the portfolio."""
+    existing = await session.scalar(
+        select(Project).where(Project.tenant_id == tenant_id, Project.idea_id == idea_id)
+    )
+    if existing:
+        return existing
+    project = Project(
+        tenant_id=tenant_id,
+        idea_id=idea_id,
+        reference=idea_reference.replace("IDEA-", "PRJ-", 1),
+        status=ProjectStatus.CHARTER_IN_PROGRESS.value,
+        health="not_set",
+        active_baseline_version=0,
+        lead_name=charter.leader,
+        target_completion_date=charter.target_completion_date,
+    )
+    session.add(project)
+    await session.flush()
+    return project
 
 
 async def create_project_from_submitted_charter(
@@ -92,19 +140,27 @@ async def create_project_from_submitted_charter(
     existing = await session.scalar(
         select(Project).where(Project.tenant_id == tenant_id, Project.idea_id == idea_id)
     )
-    if existing:
+    if existing and existing.status != ProjectStatus.CHARTER_IN_PROGRESS.value:
         return existing
-    project = Project(
-        tenant_id=tenant_id,
-        idea_id=idea_id,
-        reference=idea_reference.replace("IDEA-", "PRJ-", 1),
-        status="ready_to_start",
-        health="not_set",
-        active_baseline_version=1,
-        lead_name=charter.leader,
-        target_completion_date=charter.target_completion_date,
-    )
-    session.add(project)
+    if existing:
+        # Opened at approval; submitting the charter publishes baseline v1 and starts delivery.
+        project = existing
+        project.status = ProjectStatus.READY_TO_START.value
+        project.active_baseline_version = 1
+        project.lead_name = charter.leader
+        project.target_completion_date = charter.target_completion_date
+    else:
+        project = Project(
+            tenant_id=tenant_id,
+            idea_id=idea_id,
+            reference=idea_reference.replace("IDEA-", "PRJ-", 1),
+            status=ProjectStatus.READY_TO_START.value,
+            health="not_set",
+            active_baseline_version=1,
+            lead_name=charter.leader,
+            target_completion_date=charter.target_completion_date,
+        )
+        session.add(project)
     await session.flush()
     session.add(
         ProjectCharterBaseline(
@@ -182,6 +238,7 @@ async def list_team_candidates(
                 .where(
                     Membership.tenant_id == tenant_id,
                     Membership.status == MembershipStatus.ACTIVE,
+                    contributing_membership(Membership.id, tenant_id),
                 )
                 .order_by(User.display_name, User.email)
             )
@@ -236,20 +293,17 @@ async def list_projects(tenant_id: uuid.UUID, session: AsyncSession) -> list[Pro
                 .order_by(Project.updated_at.desc())
             )
         ).all()
+        months_by_project: dict[uuid.UUID, list[ProjectBenefitMonth]] = {}
+        for month in (
+            await session.scalars(
+                select(ProjectBenefitMonth).where(ProjectBenefitMonth.tenant_id == tenant_id)
+            )
+        ).all():
+            months_by_project.setdefault(month.project_id, []).append(month)
         result: list[ProjectPortfolioEntry] = []
         for project, idea, charter, site_name, department_name, count, weighted, weight in rows:
-            entries = charter.monthly_tracking or []
-            target = sum((_money(entry.get("ftm_plan")) for entry in entries), Decimal(0))
-            achieved = sum((_money(entry.get("ftm_actual")) for entry in entries), Decimal(0))
-            validated = sum(
-                (
-                    _money(entry.get("ftm_actual"))
-                    for entry in entries
-                    if entry.get("finance_approved")
-                ),
-                Decimal(0),
-            )
-            los = sum((_money(entry.get("line_of_sight")) for entry in entries), Decimal(0))
+            target = annual_target_lakhs(idea)
+            achieved, validated, los = benefit_totals(months_by_project.get(project.id, []))
             result.append(
                 ProjectPortfolioEntry(
                     id=project.id,
@@ -368,8 +422,8 @@ async def get_project_workspace(
                 Membership.status == MembershipStatus.ACTIVE,
             )
         )
-        can_manage_plan = (
-            "tenant_admin" in roles
+        can_manage_plan = can_contribute(roles) and (
+            is_workspace_admin(roles)
             or user_id == idea.submitter_user_id
             or any(member.user_id == user_id for member in team_rows)
         )
@@ -398,7 +452,9 @@ async def get_project_workspace(
         baseline_rows = (
             await session.execute(
                 select(ProjectCharterBaseline, baseline_author)
-                .join(baseline_author, baseline_author.id == ProjectCharterBaseline.created_by_user_id)
+                .join(
+                    baseline_author, baseline_author.id == ProjectCharterBaseline.created_by_user_id
+                )
                 .where(
                     ProjectCharterBaseline.tenant_id == tenant_id,
                     ProjectCharterBaseline.project_id == project_id,
@@ -414,7 +470,7 @@ async def get_project_workspace(
             ),
             None,
         )
-        if active_baseline is None:
+        if active_baseline is None and project.status != ProjectStatus.CHARTER_IN_PROGRESS.value:
             raise ProjectNotFoundError
 
         activity_rows = (
@@ -430,29 +486,35 @@ async def get_project_workspace(
             )
         ).all()
 
-        benefit_periods = [
-            ProjectBenefitPeriodRecord(
-                month=str(entry.get("month") or ""),
-                plan=_money(entry.get("ftm_plan")),
-                achieved=_money(entry.get("ftm_actual")),
-                line_of_sight=_money(entry.get("line_of_sight")),
-                kpi_actual=(
-                    _money(entry.get("kpi_actual"))
-                    if entry.get("kpi_actual") not in (None, "")
-                    else None
-                ),
-                status=str(entry.get("status") or ""),
-                finance_approved=bool(entry.get("finance_approved")),
-            )
-            for entry in (charter.monthly_tracking or [])
-        ]
-        target = sum((entry.plan for entry in benefit_periods), Decimal(0))
-        achieved = sum((entry.achieved for entry in benefit_periods), Decimal(0))
-        validated = sum(
-            (entry.achieved for entry in benefit_periods if entry.finance_approved), Decimal(0)
+        months = list(
+            (
+                await session.scalars(
+                    select(ProjectBenefitMonth)
+                    .where(
+                        ProjectBenefitMonth.tenant_id == tenant_id,
+                        ProjectBenefitMonth.project_id == project_id,
+                    )
+                    .order_by(ProjectBenefitMonth.month)
+                )
+            ).all()
         )
-        line_of_sight = sum(
-            (entry.line_of_sight for entry in benefit_periods), Decimal(0)
+        benefit_periods = [benefit_period_record(month) for month in months]
+        target = annual_target_lakhs(idea)
+        achieved, validated, line_of_sight = benefit_totals(months)
+        benefits_milestone = next((item for item in milestone_rows if item.benefits_start), None)
+        benefits = BenefitTrackingRecord(
+            state="open" if months else "waiting" if benefits_milestone else "unplanned",
+            milestone_title=benefits_milestone.title if benefits_milestone else None,
+            milestone_due=benefits_milestone.planned_end if benefits_milestone else None,
+            milestone_status=benefits_milestone.status if benefits_milestone else None,
+            annual_target=target,
+            kpi_only=charter.benefit_type == "kpi_only",
+            kpi_name=charter.kpi_name,
+            kpi_baseline=" ".join(filter(None, [idea.current_state, idea.baseline_uom])),
+            kpi_target=" ".join(filter(None, [idea.target_state, idea.target_uom])),
+            can_record=can_manage_plan
+            and project.status != ProjectStatus.CHARTER_IN_PROGRESS.value,
+            can_validate=is_workspace_admin(roles),
         )
         total_weight = sum((milestone.weight for milestone in milestone_rows), Decimal(0))
         weighted_progress = sum(
@@ -482,8 +544,11 @@ async def get_project_workspace(
             validated=validated,
             line_of_sight=line_of_sight,
             projected_outcome=achieved + line_of_sight,
-            charter=ProjectCharterSnapshotRecord.model_validate(active_baseline.snapshot or {}),
+            charter=ProjectCharterSnapshotRecord.model_validate(
+                active_baseline.snapshot if active_baseline else charter_snapshot(charter)
+            ),
             benefit_periods=benefit_periods,
+            benefits=benefits,
             milestones=[
                 ProjectMilestoneRecord(
                     id=milestone.id,
@@ -503,6 +568,14 @@ async def get_project_workspace(
                     evidence=milestone.evidence,
                     dependency_ids=milestone.dependency_ids,
                     actions=actions_by_milestone.get(milestone.id, []),
+                    baseline_planned_end=milestone.baseline_planned_end,
+                    baseline_weight=milestone.baseline_weight,
+                    benefits_start=milestone.benefits_start,
+                    variance_days=(
+                        (milestone.planned_end - milestone.baseline_planned_end).days
+                        if milestone.planned_end and milestone.baseline_planned_end
+                        else None
+                    ),
                 )
                 for milestone in milestone_rows
             ],
@@ -570,8 +643,14 @@ async def save_milestone_plan(
                 )
             ).all()
         )
-        if not idea or not (
-            "tenant_admin" in roles or user_id == idea.submitter_user_id or user_id in team_user_ids
+        if (
+            not idea
+            or not can_contribute(roles)
+            or not (
+                is_workspace_admin(roles)
+                or user_id == idea.submitter_user_id
+                or user_id in team_user_ids
+            )
         ):
             raise ProjectAccessError
         allowed_owners = team_user_ids | {idea.submitter_user_id}
@@ -665,4 +744,693 @@ async def save_milestone_plan(
             details={"milestone_count": len(command.milestones)},
         )
         await session.flush()
+    return await get_project_workspace(tenant_id, user_id, roles, project_id, session)
+
+
+# --- Baseline milestones and one-at-a-time plan changes -----------------------------------------
+
+
+async def create_baseline_milestones(
+    session: AsyncSession,
+    *,
+    tenant_id: uuid.UUID,
+    project: Project,
+    plan: list,
+    start_date: date | None,
+    allowed_owner_ids: set[uuid.UUID],
+) -> None:
+    """Turn the submitted charter's milestones into the project's baseline plan."""
+    has_milestones = await session.scalar(
+        select(func.count(ProjectMilestone.id)).where(
+            ProjectMilestone.tenant_id == tenant_id, ProjectMilestone.project_id == project.id
+        )
+    )
+    if has_milestones:
+        return
+    previous_end = start_date
+    for position, item in enumerate(plan, start=1):
+        owner_id = item.owner_user_id if item.owner_user_id in allowed_owner_ids else None
+        session.add(
+            ProjectMilestone(
+                tenant_id=tenant_id,
+                project_id=project.id,
+                position=position,
+                title=item.title.strip(),
+                owner_user_id=owner_id,
+                owner_name=item.owner_name if owner_id else "",
+                planned_start=previous_end,
+                planned_end=item.due_date,
+                baseline_planned_end=item.due_date,
+                weight=item.weight,
+                baseline_weight=item.weight,
+                progress=Decimal(0),
+                status="not_started",
+                benefits_start=item.benefits_start,
+                dependency_ids=[],
+            )
+        )
+        previous_end = item.due_date or previous_end
+    await session.flush()
+
+
+async def _plan_context(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+) -> tuple[Project, Idea, set[uuid.UUID]]:
+    """The project, its idea, and who may own milestones; raises if the caller can't plan."""
+    project = await session.scalar(
+        select(Project).where(Project.tenant_id == tenant_id, Project.id == project_id)
+    )
+    if project is None:
+        raise ProjectNotFoundError
+    idea = await session.get(Idea, project.idea_id)
+    team_user_ids = set(
+        (
+            await session.scalars(
+                select(ProjectTeamMember.user_id).where(
+                    ProjectTeamMember.tenant_id == tenant_id,
+                    ProjectTeamMember.project_id == project_id,
+                    ProjectTeamMember.status.in_(("invited", "accepted")),
+                )
+            )
+        ).all()
+    )
+    if (
+        idea is None
+        or not can_contribute(roles)
+        or not (
+            is_workspace_admin(roles)
+            or user_id == idea.submitter_user_id
+            or user_id in team_user_ids
+        )
+    ):
+        raise ProjectAccessError
+    if project.status == ProjectStatus.CHARTER_IN_PROGRESS.value:
+        raise ProjectValidationError("Submit the charter before changing the delivery plan.")
+    return project, idea, team_user_ids | {idea.submitter_user_id}
+
+
+async def _milestone(
+    session: AsyncSession, tenant_id: uuid.UUID, project_id: uuid.UUID, milestone_id: uuid.UUID
+) -> ProjectMilestone:
+    milestone = await session.scalar(
+        select(ProjectMilestone)
+        .where(
+            ProjectMilestone.tenant_id == tenant_id,
+            ProjectMilestone.project_id == project_id,
+            ProjectMilestone.id == milestone_id,
+        )
+        .with_for_update()
+    )
+    if milestone is None:
+        raise ProjectNotFoundError
+    return milestone
+
+
+async def _owner_name(
+    session: AsyncSession, owner_id: uuid.UUID | None, allowed: set[uuid.UUID]
+) -> str:
+    if owner_id is None:
+        return ""
+    if owner_id not in allowed:
+        raise ProjectValidationError("Owners must be the project lead or on the project team.")
+    user = await session.get(User, owner_id)
+    return user.display_name if user else ""
+
+
+async def _weight_total_without(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    project_id: uuid.UUID,
+    milestone_id: uuid.UUID | None,
+) -> Decimal:
+    statement = select(func.coalesce(func.sum(ProjectMilestone.weight), 0)).where(
+        ProjectMilestone.tenant_id == tenant_id, ProjectMilestone.project_id == project_id
+    )
+    if milestone_id is not None:
+        statement = statement.where(ProjectMilestone.id != milestone_id)
+    return Decimal(await session.scalar(statement) or 0)
+
+
+def _start_delivery(project: Project) -> None:
+    if project.status == ProjectStatus.READY_TO_START.value:
+        project.status = ProjectStatus.IN_PROGRESS.value
+        project.started_at = datetime.now(UTC)
+
+
+def _plain(value: object) -> object:
+    return (
+        value.isoformat()
+        if isinstance(value, date)
+        else str(value)
+        if isinstance(value, (Decimal, uuid.UUID))
+        else value
+    )
+
+
+BASELINE_FIELDS = ("title", "planned_end", "weight")
+
+
+async def update_milestone(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+    milestone_id: uuid.UUID,
+    command: MilestonePatchCommand,
+    session: AsyncSession,
+) -> ProjectWorkspaceRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        project, idea, owners = await _plan_context(session, tenant_id, user_id, roles, project_id)
+        milestone = await _milestone(session, tenant_id, project_id, milestone_id)
+        nullable = {"owner_user_id", "planned_start", "planned_end", "actual_start", "actual_end"}
+        sent = {
+            field: getattr(command, field)
+            for field in command.model_fields_set
+            if field != "reason" and (getattr(command, field) is not None or field in nullable)
+        }
+        changes: dict[str, list[object]] = {}
+        for field, value in sent.items():
+            if field == "owner_user_id":
+                milestone.owner_name = await _owner_name(session, value, owners)
+            if getattr(milestone, field) != value:
+                changes[field] = [_plain(getattr(milestone, field)), _plain(value)]
+                setattr(milestone, field, value)
+        if "weight" in changes:
+            total = await _weight_total_without(session, tenant_id, project_id, milestone.id)
+            if total + milestone.weight > 100:
+                raise ProjectValidationError(
+                    f"Weights would total {(total + milestone.weight).normalize():f}%. Keep them at 100% or less."
+                )
+        if (
+            milestone.planned_start
+            and milestone.planned_end
+            and milestone.planned_end < milestone.planned_start
+        ):
+            raise ProjectValidationError("The due date must be on or after the start date.")
+        replanned = [field for field in BASELINE_FIELDS if field in changes]
+        if replanned and milestone.baseline_planned_end is not None and not command.reason.strip():
+            raise ProjectValidationError(
+                "Say why the plan changed. Reviewers see this next to the change."
+            )
+        today = datetime.now(UTC).date()
+        if changes.get("status") and milestone.status == "complete":
+            milestone.progress = Decimal(100)
+            milestone.actual_end = milestone.actual_end or today
+        elif "progress" in changes and milestone.progress >= 100 and "status" not in sent:
+            milestone.status = "complete"
+            milestone.actual_end = milestone.actual_end or today
+        elif (
+            "progress" in changes
+            and 0 < milestone.progress < 100
+            and "status" not in sent
+            and milestone.status in ("not_started", "complete")
+        ):
+            milestone.status = "in_progress"
+            milestone.actual_end = None if "actual_end" not in sent else milestone.actual_end
+        if milestone.status in ("in_progress", "complete") or milestone.progress > 0:
+            milestone.actual_start = milestone.actual_start or today
+            _start_delivery(project)
+        if milestone.benefits_start and milestone.status == "complete":
+            await open_benefit_months(
+                session,
+                tenant_id=tenant_id,
+                project=project,
+                idea=idea,
+                start=milestone.actual_end or today,
+            )
+        if changes.get("benefits_start") and milestone.benefits_start:
+            others = (
+                await session.scalars(
+                    select(ProjectMilestone).where(
+                        ProjectMilestone.tenant_id == tenant_id,
+                        ProjectMilestone.project_id == project_id,
+                        ProjectMilestone.id != milestone.id,
+                        ProjectMilestone.benefits_start.is_(True),
+                    )
+                )
+            ).all()
+            for other in others:
+                other.benefits_start = False
+        if changes:
+            record_audit_event(
+                session,
+                tenant_id=tenant_id,
+                actor_user_id=user_id,
+                subject_user_id=idea.submitter_user_id,
+                event_type="milestone.replanned" if replanned else "milestone.updated",
+                entity_type="project_milestone",
+                entity_id=milestone.id,
+                entity_reference=idea.reference,
+                summary=(
+                    f'Re-planned "{milestone.title}" on {project.reference}: {command.reason.strip()}'
+                    if replanned and command.reason.strip()
+                    else f'Updated "{milestone.title}" on {project.reference}.'
+                ),
+                details={"changes": changes, "reason": command.reason.strip() or None},
+            )
+        await session.flush()
+    return await get_project_workspace(tenant_id, user_id, roles, project_id, session)
+
+
+async def add_milestone(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+    command: MilestoneCreateCommand,
+    session: AsyncSession,
+) -> ProjectWorkspaceRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        project, idea, owners = await _plan_context(session, tenant_id, user_id, roles, project_id)
+        has_baseline = project.active_baseline_version >= 1
+        if has_baseline and not command.reason.strip():
+            raise ProjectValidationError("Say why this milestone is being added to the plan.")
+        total = await _weight_total_without(session, tenant_id, project_id, None)
+        if total + command.weight > 100:
+            raise ProjectValidationError(
+                f"Weights would total {(total + command.weight).normalize():f}%. Lower another milestone first."
+            )
+        last = await session.scalar(
+            select(func.coalesce(func.max(ProjectMilestone.position), 0)).where(
+                ProjectMilestone.tenant_id == tenant_id, ProjectMilestone.project_id == project_id
+            )
+        )
+        milestone = ProjectMilestone(
+            tenant_id=tenant_id,
+            project_id=project_id,
+            position=int(last or 0) + 1,
+            title=command.title.strip(),
+            owner_user_id=command.owner_user_id,
+            owner_name=await _owner_name(session, command.owner_user_id, owners),
+            planned_end=command.planned_end,
+            weight=command.weight,
+            progress=Decimal(0),
+            status="not_started",
+            dependency_ids=[],
+        )
+        session.add(milestone)
+        await session.flush()
+        record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+            subject_user_id=idea.submitter_user_id,
+            event_type="milestone.added",
+            entity_type="project_milestone",
+            entity_id=milestone.id,
+            entity_reference=idea.reference,
+            summary=(
+                f'Added "{milestone.title}" to {project.reference}'
+                + (f": {command.reason.strip()}" if command.reason.strip() else ".")
+            ),
+            details={"reason": command.reason.strip() or None, "after_baseline": has_baseline},
+        )
+    return await get_project_workspace(tenant_id, user_id, roles, project_id, session)
+
+
+async def remove_milestone(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+    milestone_id: uuid.UUID,
+    reason: str,
+    session: AsyncSession,
+) -> ProjectWorkspaceRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        project, idea, _ = await _plan_context(session, tenant_id, user_id, roles, project_id)
+        milestone = await _milestone(session, tenant_id, project_id, milestone_id)
+        if milestone.baseline_planned_end is not None and not reason.strip():
+            raise ProjectValidationError("Say why this charter milestone is being removed.")
+        title, position = milestone.title, milestone.position
+        await session.delete(milestone)
+        await session.flush()
+        later = (
+            await session.scalars(
+                select(ProjectMilestone)
+                .where(
+                    ProjectMilestone.tenant_id == tenant_id,
+                    ProjectMilestone.project_id == project_id,
+                    ProjectMilestone.position > position,
+                )
+                .order_by(ProjectMilestone.position)
+            )
+        ).all()
+        for item in later:
+            item.position -= 1
+            await session.flush()
+        record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+            subject_user_id=idea.submitter_user_id,
+            event_type="milestone.removed",
+            entity_type="project_milestone",
+            entity_id=milestone_id,
+            entity_reference=idea.reference,
+            summary=f'Removed "{title}" from {project.reference}'
+            + (f": {reason.strip()}" if reason.strip() else "."),
+            details={"reason": reason.strip() or None},
+        )
+    return await get_project_workspace(tenant_id, user_id, roles, project_id, session)
+
+
+async def move_milestone(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+    milestone_id: uuid.UUID,
+    command: MilestoneMoveCommand,
+    session: AsyncSession,
+) -> ProjectWorkspaceRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        await _plan_context(session, tenant_id, user_id, roles, project_id)
+        milestone = await _milestone(session, tenant_id, project_id, milestone_id)
+        target = milestone.position + (-1 if command.direction == "up" else 1)
+        neighbour = await session.scalar(
+            select(ProjectMilestone)
+            .where(
+                ProjectMilestone.tenant_id == tenant_id,
+                ProjectMilestone.project_id == project_id,
+                ProjectMilestone.position == target,
+            )
+            .with_for_update()
+        )
+        if neighbour is not None:
+            # Positions are unique, so park one milestone while the two swap.
+            original = milestone.position
+            milestone.position = 0
+            await session.flush()
+            neighbour.position = original
+            await session.flush()
+            milestone.position = target
+            await session.flush()
+    return await get_project_workspace(tenant_id, user_id, roles, project_id, session)
+
+
+async def add_task(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+    milestone_id: uuid.UUID,
+    command: TaskCreateCommand,
+    session: AsyncSession,
+) -> ProjectWorkspaceRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        project, _, owners = await _plan_context(session, tenant_id, user_id, roles, project_id)
+        milestone = await _milestone(session, tenant_id, project_id, milestone_id)
+        session.add(
+            ProjectAction(
+                tenant_id=tenant_id,
+                milestone_id=milestone.id,
+                title=command.title.strip(),
+                owner_user_id=command.owner_user_id,
+                owner_name=await _owner_name(session, command.owner_user_id, owners),
+                due_date=command.due_date,
+                status="not_started",
+                notes="",
+            )
+        )
+        _start_delivery(project)
+    return await get_project_workspace(tenant_id, user_id, roles, project_id, session)
+
+
+async def update_task(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+    milestone_id: uuid.UUID,
+    task_id: uuid.UUID,
+    command: TaskPatchCommand,
+    session: AsyncSession,
+    *,
+    delete_task: bool = False,
+) -> ProjectWorkspaceRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        project, _, owners = await _plan_context(session, tenant_id, user_id, roles, project_id)
+        await _milestone(session, tenant_id, project_id, milestone_id)
+        task = await session.scalar(
+            select(ProjectAction).where(
+                ProjectAction.tenant_id == tenant_id,
+                ProjectAction.milestone_id == milestone_id,
+                ProjectAction.id == task_id,
+            )
+        )
+        if task is None:
+            raise ProjectNotFoundError
+        if delete_task:
+            await session.delete(task)
+        else:
+            for field in command.model_fields_set:
+                value = getattr(command, field)
+                if value is None and field not in ("owner_user_id", "due_date"):
+                    continue
+                if field == "owner_user_id":
+                    task.owner_name = await _owner_name(session, value, owners)
+                setattr(task, field, value)
+            if "status" in command.model_fields_set:
+                task.completed_at = datetime.now(UTC) if task.status == "complete" else None
+                _start_delivery(project)
+    return await get_project_workspace(tenant_id, user_id, roles, project_id, session)
+
+
+# --- Benefits in delivery --------------------------------------------------------------------
+
+BENEFIT_MONTHS = 12
+LAKH = Decimal(100000)
+
+
+def annual_target_lakhs(idea: Idea) -> Decimal:
+    """The yearly benefit the approved idea promised, in ₹ lakhs (saving plus cost avoidance)."""
+    total = (idea.estimated_annual_saving or Decimal(0)) + (idea.cost_avoidance or Decimal(0))
+    return (Decimal(total) / LAKH).quantize(Decimal("0.01"))
+
+
+def benefit_totals(months: list[ProjectBenefitMonth]) -> tuple[Decimal, Decimal, Decimal]:
+    """Achieved, Finance-validated, and line-of-sight totals across recorded months."""
+    achieved = sum((month.actual or Decimal(0) for month in months), Decimal(0))
+    validated = sum(
+        (month.actual or Decimal(0) for month in months if month.finance_status == "validated"),
+        Decimal(0),
+    )
+    line_of_sight = sum((month.line_of_sight or Decimal(0) for month in months), Decimal(0))
+    return achieved, validated, line_of_sight
+
+
+def benefit_period_record(month: ProjectBenefitMonth) -> ProjectBenefitPeriodRecord:
+    return ProjectBenefitPeriodRecord(
+        month=month.month.strftime("%Y-%m"),
+        plan=month.plan,
+        achieved=month.actual or Decimal(0),
+        has_actual=month.actual is not None,
+        line_of_sight=month.line_of_sight or Decimal(0),
+        kpi_actual=month.kpi_actual,
+        status=month.status,
+        notes=month.notes,
+        finance_approved=month.finance_status == "validated",
+        finance_status=month.finance_status,
+        finance_comment=month.finance_comment,
+    )
+
+
+def first_of_month(value: date) -> date:
+    return value.replace(day=1)
+
+
+def add_months(value: date, count: int) -> date:
+    index = value.month - 1 + count
+    return date(value.year + index // 12, index % 12 + 1, 1)
+
+
+def monthly_plan(annual: Decimal) -> list[Decimal]:
+    """Spread the yearly target across twelve months; the last month takes the rounding."""
+    each = (annual / BENEFIT_MONTHS).quantize(Decimal("0.01"))
+    return [each] * (BENEFIT_MONTHS - 1) + [annual - each * (BENEFIT_MONTHS - 1)]
+
+
+async def open_benefit_months(
+    session: AsyncSession, *, tenant_id: uuid.UUID, project: Project, idea: Idea, start: date
+) -> None:
+    """Open twelve months of tracking from the month the benefits milestone completed."""
+    existing = await session.scalar(
+        select(func.count(ProjectBenefitMonth.id)).where(
+            ProjectBenefitMonth.tenant_id == tenant_id, ProjectBenefitMonth.project_id == project.id
+        )
+    )
+    if existing:
+        return
+    first = first_of_month(start)
+    for offset, plan in enumerate(monthly_plan(annual_target_lakhs(idea))):
+        session.add(
+            ProjectBenefitMonth(
+                tenant_id=tenant_id,
+                project_id=project.id,
+                month=add_months(first, offset),
+                plan=plan,
+                status="",
+                notes="",
+                finance_status="open",
+                finance_comment="",
+            )
+        )
+    record_audit_event(
+        session,
+        tenant_id=tenant_id,
+        actor_user_id=None,
+        subject_user_id=idea.submitter_user_id,
+        event_type="benefits.opened",
+        entity_type="project",
+        entity_id=project.id,
+        entity_reference=idea.reference,
+        summary=f"Benefit tracking opened for {project.reference} from {first:%b %Y}.",
+        details={"first_month": first.isoformat()},
+    )
+    await session.flush()
+
+
+def _parse_month(value: str) -> date:
+    try:
+        return date.fromisoformat(f"{value}-01")
+    except ValueError as error:
+        raise ProjectNotFoundError from error
+
+
+async def _benefit_month(
+    session: AsyncSession, tenant_id: uuid.UUID, project_id: uuid.UUID, month: str
+) -> ProjectBenefitMonth:
+    row = await session.scalar(
+        select(ProjectBenefitMonth)
+        .where(
+            ProjectBenefitMonth.tenant_id == tenant_id,
+            ProjectBenefitMonth.project_id == project_id,
+            ProjectBenefitMonth.month == _parse_month(month),
+        )
+        .with_for_update()
+    )
+    if row is None:
+        raise ProjectNotFoundError
+    return row
+
+
+async def record_benefit_month(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+    month: str,
+    command: BenefitMonthCommand,
+    session: AsyncSession,
+) -> ProjectWorkspaceRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        await _plan_context(session, tenant_id, user_id, roles, project_id)
+        row = await _benefit_month(session, tenant_id, project_id, month)
+        if row.finance_status in ("submitted", "validated"):
+            raise ProjectValidationError(
+                "This month is with Finance. It can change again if Finance challenges it."
+            )
+        sent = command.model_fields_set
+        future = row.month > first_of_month(datetime.now(UTC).date())
+        if future and sent & {"actual", "kpi_actual", "status"}:
+            raise ProjectValidationError("Actuals can be recorded once the month has started.")
+        for field in sent:
+            value = getattr(command, field)
+            if value is None and field in ("plan", "status", "notes"):
+                continue
+            setattr(row, field, value)
+        await session.flush()
+    return await get_project_workspace(tenant_id, user_id, roles, project_id, session)
+
+
+async def submit_benefit_month(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+    month: str,
+    session: AsyncSession,
+) -> ProjectWorkspaceRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        project, idea, _ = await _plan_context(session, tenant_id, user_id, roles, project_id)
+        row = await _benefit_month(session, tenant_id, project_id, month)
+        if row.finance_status not in ("open", "challenged"):
+            raise ProjectValidationError("This month has already been sent to Finance.")
+        if row.actual is None:
+            raise ProjectValidationError("Record the actual benefit before sending it to Finance.")
+        row.finance_status = "submitted"
+        row.submitted_by_user_id = user_id
+        row.submitted_at = datetime.now(UTC)
+        record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+            subject_user_id=idea.submitter_user_id,
+            event_type="benefits.submitted",
+            entity_type="project",
+            entity_id=project.id,
+            entity_reference=idea.reference,
+            summary=f"Sent {row.month:%b %Y} benefits ({row.actual} L) to Finance for {project.reference}.",
+            details={"month": row.month.isoformat(), "actual": str(row.actual)},
+        )
+    return await get_project_workspace(tenant_id, user_id, roles, project_id, session)
+
+
+async def review_benefit_month(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    project_id: uuid.UUID,
+    month: str,
+    command: BenefitReviewCommand,
+    session: AsyncSession,
+) -> ProjectWorkspaceRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        if not is_workspace_admin(roles):
+            raise ProjectAccessError
+        project = await session.scalar(
+            select(Project).where(Project.tenant_id == tenant_id, Project.id == project_id)
+        )
+        if project is None:
+            raise ProjectNotFoundError
+        idea = await session.get(Idea, project.idea_id)
+        row = await _benefit_month(session, tenant_id, project_id, month)
+        if row.finance_status != "submitted":
+            raise ProjectValidationError("Only months sent to Finance can be reviewed.")
+        if command.decision == "challenge" and not command.comment.strip():
+            raise ProjectValidationError("Say what needs to change so the project lead can fix it.")
+        row.finance_status = "validated" if command.decision == "validate" else "challenged"
+        row.finance_comment = command.comment.strip()
+        row.reviewed_by_user_id = user_id
+        row.reviewed_at = datetime.now(UTC)
+        record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+            subject_user_id=idea.submitter_user_id if idea else None,
+            event_type=f"benefits.{row.finance_status}",
+            entity_type="project",
+            entity_id=project.id,
+            entity_reference=idea.reference if idea else project.reference,
+            summary=(
+                f"Finance {'validated' if command.decision == 'validate' else 'challenged'} "
+                f"{row.month:%b %Y} benefits for {project.reference}"
+                + (f": {row.finance_comment}" if row.finance_comment else ".")
+            ),
+            details={"month": row.month.isoformat(), "comment": row.finance_comment or None},
+        )
     return await get_project_workspace(tenant_id, user_id, roles, project_id, session)

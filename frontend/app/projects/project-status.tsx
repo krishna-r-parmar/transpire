@@ -1,10 +1,11 @@
-import { AlertTriangle, Ban, CheckCircle2, CircleDashed, CircleDot, Clock3, Flag, OctagonAlert, PauseCircle, PlayCircle, SearchCheck, ShieldCheck, XCircle } from "lucide-react";
+import { AlertTriangle, Ban, CheckCircle2, CircleDashed, CircleDot, Clock3, FilePen, Flag, OctagonAlert, PauseCircle, PlayCircle, SearchCheck, ShieldCheck, XCircle } from "lucide-react";
 import { StatusPill } from "@/components/ui/workspace";
 
 type Tone = "neutral" | "info" | "success" | "warning" | "danger";
 type Entry = { label: string; tone: Tone; Icon: typeof CircleDot };
 
 export const projectStatuses: Record<string, Entry> = {
+  charter_in_progress: { label: "Charter in progress", tone: "info", Icon: FilePen },
   ready_to_start: { label: "Ready to start", tone: "neutral", Icon: Flag },
   in_progress: { label: "In progress", tone: "info", Icon: PlayCircle },
   on_hold: { label: "On hold", tone: "warning", Icon: PauseCircle },

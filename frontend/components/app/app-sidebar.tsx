@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bell, ChevronsUpDown, FileClock, FolderKanban, Home, ListFilter, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Settings2, X } from "lucide-react";
+import { ArrowLeft, Bell, ChevronsUpDown, FileClock, FolderKanban, Home, Inbox, ListFilter, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Settings2, Sun, X } from "lucide-react";
 import Image from "next/image";
 import { BetaTag } from "@/components/ui/beta-tag";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -8,8 +8,10 @@ import { TenantLink as Link } from "@/components/app/tenant-link";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { apiRequest, type SessionIdentity } from "@/lib/api";
 import { adminHome, isAdminRoute, visibleAdminGroups, type AdminRoute } from "@/components/admin/admin-nav";
+import { canContribute, isWorkspaceAdmin } from "@/lib/roles";
 import { useApprovalCount } from "./use-approval-count";
 import { ProfileAvatar } from "./profile-avatar";
+import { setTheme, useTheme } from "@/lib/theme";
 import styles from "./app-sidebar.module.css";
 
 export type AppRoute = "home" | "submit" | "ideas" | "projects" | "profile" | "notifications" | AdminRoute;
@@ -56,7 +58,7 @@ export function AppSidebar({ session, active }: { session: SessionIdentity; acti
     <div className={styles.mobileBar}>
       <button type="button" className={styles.iconButton} onClick={() => setDrawerOpen(true)} aria-label="Open navigation" aria-expanded={drawerOpen} aria-controls="app-sidebar"><Menu size={20} aria-hidden="true" /></button>
       <Link className={styles.mobileLogo} href="/home" aria-label="TRANSPIRE home"><Image src="/brand/transpire-logo.png" alt="TRANSPIRE" width={1400} height={371} priority /><BetaTag /></Link>
-      <Link className={styles.iconButton} href="/notifications" aria-label={approvalCount ? `Approvals, ${approvalCount} need attention` : "Approvals"}><Bell size={19} aria-hidden="true" />{badge}</Link>
+      <Link className={styles.iconButton} href="/notifications" aria-label={approvalCount ? `Inbox, ${approvalCount} need your action` : "Inbox"}><Bell size={19} aria-hidden="true" />{badge}</Link>
     </div>
     <button type="button" className={styles.backdrop} data-open={drawerOpen} onClick={() => setDrawerOpen(false)} aria-label="Close navigation" tabIndex={drawerOpen ? 0 : -1} />
 
@@ -83,13 +85,13 @@ export function AppSidebar({ session, active }: { session: SessionIdentity; acti
           </NavGroup>)}
         </nav>
       </> : <>
-        <Link className={styles.submit} href="/ideas/new/v2" data-active={active === "submit"} title="Submit an idea"><Plus size={18} aria-hidden="true" /><span>Submit an idea</span></Link>
+        {canContribute(session.roles) ? <Link className={styles.submit} href="/ideas/new/v2" data-active={active === "submit"} title="Submit an idea"><Plus size={18} aria-hidden="true" /><span>Submit an idea</span></Link> : null}
         <nav className={styles.nav} aria-label="Primary">
           <NavGroup label="Workspace">
             <NavItem href="/home" icon={<Home size={18} />} label="Home" active={active === "home"} />
             <NavItem href="/ideas" icon={<ListFilter size={18} />} label="Idea Bank" active={active === "ideas"} />
             <NavItem href="/projects" icon={<FolderKanban size={18} />} label="Projects" active={active === "projects"} />
-            <NavItem href="/notifications" icon={<Bell size={18} />} label="Approvals" active={active === "notifications"} badge={badge} ariaLabel={approvalCount ? `Approvals, ${approvalCount} need attention` : undefined} />
+            <NavItem href="/notifications" icon={<Inbox size={18} />} label="Inbox" active={active === "notifications"} badge={badge} ariaLabel={approvalCount ? `Inbox, ${approvalCount} need your action` : undefined} />
           </NavGroup>
           {adminHref ? <NavGroup label="Manage">
             <NavItem href={adminHref} icon={<Settings2 size={18} />} label="Administration" active={false} />
@@ -123,6 +125,7 @@ function AccountMenu({ session, active }: { session: SessionIdentity; active: bo
   const [signingOut, setSigningOut] = useState(false);
   const [displayName, setDisplayName] = useState(session.user.display_name);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const theme = useTheme();
 
   useEffect(() => {
     const updateName = (event: Event) => setDisplayName((event as CustomEvent<{ displayName: string }>).detail.displayName);
@@ -160,13 +163,14 @@ function AccountMenu({ session, active }: { session: SessionIdentity; active: bo
     </button>
     <div className={styles.menu} role="menu" data-open={open}>
       <Link ref={firstItem} href="/profile" role="menuitem" onClick={() => setOpen(false)}><Pencil size={15} aria-hidden="true" />Edit profile</Link>
-      <Link href={session.roles.includes("tenant_admin") ? "/admin/audit-log" : "/profile#audit-log"} role="menuitem" onClick={() => setOpen(false)}><FileClock size={15} aria-hidden="true" />{session.roles.includes("tenant_admin") ? "Audit log" : "Your activity"}</Link>
+      <Link href={isWorkspaceAdmin(session.roles) ? "/admin/audit-log" : "/profile#audit-log"} role="menuitem" onClick={() => setOpen(false)}><FileClock size={15} aria-hidden="true" />{isWorkspaceAdmin(session.roles) ? "Audit log" : "Your activity"}</Link>
       {workspaces.length > 1 ? <div className={styles.workspaces}>
         <span>Switch organisation</span>
         {workspaces.map((workspace) => workspace.id === session.tenant.id
           ? <strong key={workspace.id}>{workspace.name}<small>Current</small></strong>
           : <a key={workspace.id} role="menuitem" href={`/t/${encodeURIComponent(workspace.slug)}/sign-in`}>{workspace.name}</a>)}
       </div> : null}
+      <button type="button" role="menuitemcheckbox" aria-checked={theme === "dark"} onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>{theme === "dark" ? <Sun size={15} aria-hidden="true" /> : <Moon size={15} aria-hidden="true" />}{theme === "dark" ? "Light mode" : "Dark mode"}</button>
       <button type="button" role="menuitem" onClick={() => void signOut()} disabled={signingOut}><LogOut size={15} aria-hidden="true" />{signingOut ? "Signing out" : "Sign out"}</button>
     </div>
   </div>;

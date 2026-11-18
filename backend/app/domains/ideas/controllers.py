@@ -1,5 +1,6 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -24,7 +25,9 @@ from app.domains.ideas.models import (
     Idea,
     IdeaApprovalStage,
     IdeaBankPolicy,
+    IdeaJoinRequest,
     IdeaStatus,
+    JoinRequestStatus,
     ProjectCharter,
 )
 from app.domains.ideas.repositories import SQLAlchemyIdeaRepository
@@ -35,6 +38,9 @@ from app.domains.ideas.schemas import (
     ApprovalStageRecord,
     ApprovalWorkItem,
     CatalogItem,
+    CharterIdeaContext,
+    CharterMilestone,
+    CharterWorkspaceRecord,
     EditableIdeaRecord,
     HomeIdeaSummary,
     HomeWorkspaceSummary,
@@ -42,17 +48,26 @@ from app.domains.ideas.schemas import (
     IdeaBankPolicyCommand,
     IdeaBankPolicySummary,
     IdeaDetailRecord,
+    IdeaJourneyStage,
     IdeaRecord,
     IdeaSubmissionCatalog,
+    IdeaSummaryRecord,
     IdeaUpsertCommand,
+    JoinRequestCommand,
+    JoinRequestRecord,
+    JoinState,
     ProjectCharterCommand,
     ProjectCharterRecord,
 )
+from app.domains.identity.access import ADMIN_ROLE_KEYS, can_contribute, is_workspace_admin
 from app.domains.identity.models import Membership, MembershipStatus, Role, User, membership_roles
 from app.domains.projects.controllers import (
     assign_project_team,
+    create_baseline_milestones,
     create_project_from_submitted_charter,
+    open_project_for_approved_idea,
 )
+from app.domains.projects.models import Project, ProjectTeamMember
 from app.domains.tenants.models import Tenant
 
 
@@ -134,6 +149,8 @@ def _charter_record(charter: ProjectCharter) -> ProjectCharterRecord:
         id=charter.id,
         sponsor=charter.sponsor,
         leader=charter.leader,
+        sponsor_user_id=charter.sponsor_user_id,
+        leader_user_id=charter.leader_user_id,
         department_id=charter.department_id,
         site_id=charter.site_id,
         start_date=charter.start_date,
@@ -149,6 +166,7 @@ def _charter_record(charter: ProjectCharter) -> ProjectCharterRecord:
         impact_areas=charter.impact_areas,
         belt_level=charter.belt_level,
         action_items=charter.action_items,
+        milestone_plan=charter.milestone_plan or [],
         monthly_tracking=charter.monthly_tracking,
         status="submitted" if charter.submitted_at else "draft",
         updated_at=charter.updated_at,
@@ -169,7 +187,7 @@ async def _resolve_fallback_approver(
                 Membership.tenant_id == tenant_id,
                 Membership.status == MembershipStatus.ACTIVE,
                 Role.tenant_id == tenant_id,
-                Role.key == "tenant_admin",
+                Role.key.in_(ADMIN_ROLE_KEYS),
             )
             .order_by(User.display_name)
             .limit(1)
@@ -516,66 +534,184 @@ async def delete_draft_idea(
         await session.delete(idea)
 
 
+# Ideas anyone in the workspace can find in the Idea Bank. Drafts, corrections, rejections and
+# withdrawals stay private to their owner, approvers and Workspace Admins.
+BANK_STATUSES = frozenset(
+    {
+        IdeaStatus.SUBMITTED,
+        IdeaStatus.APPROVED,
+        IdeaStatus.CHARTER_IN_PROGRESS,
+        IdeaStatus.CHARTER_SUBMITTED,
+    }
+)
+
+
+@dataclass(frozen=True)
+class BankVisibility:
+    """Which Idea Bank fields a viewer may see, derived from the tenant's visibility policy."""
+
+    operational: bool
+    narrative: bool
+    contributor: bool
+    financials: bool
+
+    @classmethod
+    def from_policy(cls, policy: IdeaBankPolicy) -> "BankVisibility":
+        return cls(
+            operational=policy.detail_level in {"operational", "full"},
+            narrative=policy.detail_level == "full",
+            contributor=True,  # Owner and team names are always shown.
+            financials=bool(policy.show_financials),
+        )
+
+    @classmethod
+    def everything(cls) -> "BankVisibility":
+        return cls(operational=True, narrative=True, contributor=True, financials=True)
+
+
+def bank_entry_fields(
+    idea: Idea,
+    contributor: str | None,
+    category: str | None,
+    subcategory: str | None,
+    process_area: str | None,
+    visibility: BankVisibility,
+) -> dict:
+    """Idea Bank fields for one idea, with everything the policy hides set to None."""
+    operational, full, money = visibility.operational, visibility.narrative, visibility.financials
+    return {
+        "id": idea.id,
+        "reference": idea.reference,
+        "title": idea.title,
+        "status": idea.status.value,
+        "idea_type": idea.idea_type,
+        "category": category,
+        "submitted_at": idea.submitted_at,
+        "contributor": contributor if visibility.contributor else None,
+        "subcategory": subcategory if operational else None,
+        "process_area": process_area if operational else None,
+        "impacts": idea.impacts if operational else None,
+        "current_state": idea.current_state if operational else None,
+        "baseline_uom": idea.baseline_uom if operational else None,
+        "target_state": idea.target_state if operational else None,
+        "target_uom": idea.target_uom if operational else None,
+        "problem_statement": idea.problem_statement if full else None,
+        "business_case": idea.business_case if full else None,
+        "estimated_annual_saving": idea.estimated_annual_saving if money else None,
+        "cost_avoidance": idea.cost_avoidance if money else None,
+        "investment_required": idea.investment_required if money else None,
+        "estimated_annual_saving_usd": (
+            _as_usd(idea.estimated_annual_saving, idea.usd_exchange_rate) if money else None
+        ),
+        "cost_avoidance_usd": _as_usd(idea.cost_avoidance, idea.usd_exchange_rate)
+        if money
+        else None,
+        "investment_required_usd": (
+            _as_usd(idea.investment_required, idea.usd_exchange_rate) if money else None
+        ),
+        "usd_exchange_rate": idea.usd_exchange_rate if money else None,
+        "fx_rate_date": idea.fx_rate_date if money else None,
+    }
+
+
+def can_manage_idea(
+    idea: Idea, stages: list[IdeaApprovalStage], user_id: uuid.UUID, roles: list[str]
+) -> bool:
+    """Owner, any assigned approver, or a Workspace Admin: the people who may open the full record."""
+    return (
+        idea.submitter_user_id == user_id
+        or any(stage.assignee_user_id == user_id for stage in stages)
+        or is_workspace_admin(roles)
+    )
+
+
+async def _bank_policy(session: AsyncSession, tenant_id: uuid.UUID) -> IdeaBankPolicy:
+    policy = await repository.get_policy(session, tenant_id)
+    if policy is None:
+        policy = IdeaBankPolicy(tenant_id=tenant_id)
+        session.add(policy)
+        await session.flush()
+    return policy
+
+
 async def list_idea_bank(tenant_id: uuid.UUID, session: AsyncSession) -> list[IdeaBankEntry]:
     async with session.begin():
         await apply_tenant_to_transaction(session, tenant_id)
-        policy = await repository.get_policy(session, tenant_id)
-        if policy is None:
-            policy = IdeaBankPolicy(tenant_id=tenant_id)
-            session.add(policy)
-            await session.flush()
-        entries = []
-        for idea, contributor, category, subcategory, process_area in await repository.list_bank(
-            session, tenant_id
-        ):
-            operational = policy.detail_level in {"operational", "full"}
-            full = policy.detail_level == "full"
-            entries.append(
-                IdeaBankEntry(
-                    id=idea.id,
-                    reference=idea.reference,
-                    title=idea.title,
-                    status=idea.status.value,
-                    idea_type=idea.idea_type,
-                    category=category,
-                    submitted_at=idea.submitted_at,
-                    contributor=contributor if policy.show_contributor else None,
-                    subcategory=subcategory if operational else None,
-                    process_area=process_area if operational else None,
-                    impacts=idea.impacts if operational else None,
-                    current_state=idea.current_state if operational else None,
-                    baseline_uom=idea.baseline_uom if operational else None,
-                    target_state=idea.target_state if operational else None,
-                    target_uom=idea.target_uom if operational else None,
-                    problem_statement=idea.problem_statement if full else None,
-                    business_case=idea.business_case if full else None,
-                    estimated_annual_saving=(
-                        idea.estimated_annual_saving if policy.show_financials else None
-                    ),
-                    cost_avoidance=idea.cost_avoidance if policy.show_financials else None,
-                    investment_required=idea.investment_required
-                    if policy.show_financials
-                    else None,
-                    estimated_annual_saving_usd=(
-                        _as_usd(idea.estimated_annual_saving, idea.usd_exchange_rate)
-                        if policy.show_financials
-                        else None
-                    ),
-                    cost_avoidance_usd=(
-                        _as_usd(idea.cost_avoidance, idea.usd_exchange_rate)
-                        if policy.show_financials
-                        else None
-                    ),
-                    investment_required_usd=(
-                        _as_usd(idea.investment_required, idea.usd_exchange_rate)
-                        if policy.show_financials
-                        else None
-                    ),
-                    usd_exchange_rate=idea.usd_exchange_rate if policy.show_financials else None,
-                    fx_rate_date=idea.fx_rate_date if policy.show_financials else None,
+        visibility = BankVisibility.from_policy(await _bank_policy(session, tenant_id))
+        rows = await repository.list_bank(session, tenant_id)
+        teams = await team_names_by_idea(session, tenant_id, [row[0].id for row in rows])
+        return [
+            IdeaBankEntry(**bank_entry_fields(*row, visibility), team=teams.get(row[0].id, []))
+            for row in rows
+        ]
+
+
+async def get_idea_summary(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    idea_id: uuid.UUID,
+    session: AsyncSession,
+) -> IdeaSummaryRecord:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        row = await repository.get_summary_row(session, tenant_id, idea_id)
+        if row is None:
+            raise IdeaNotFoundError
+        idea, contributor, category, subcategory, process_area, site, department = row
+        stages = list(
+            (
+                await session.scalars(
+                    select(IdeaApprovalStage)
+                    .where(
+                        IdeaApprovalStage.tenant_id == tenant_id,
+                        IdeaApprovalStage.idea_id == idea_id,
+                    )
+                    .order_by(IdeaApprovalStage.round_number, IdeaApprovalStage.stage_order)
                 )
-            )
-        return entries
+            ).all()
+        )
+        manager = can_manage_idea(idea, stages, user_id, roles)
+        if not manager and idea.status not in BANK_STATUSES:
+            raise IdeaAccessError
+        visibility = (
+            BankVisibility.everything()
+            if manager
+            else BankVisibility.from_policy(await _bank_policy(session, tenant_id))
+        )
+        teams = await team_names_by_idea(session, tenant_id, [idea.id])
+        join_state = await viewer_join_state(session, tenant_id, idea, user_id, roles)
+        is_owner_or_admin = idea.submitter_user_id == user_id or is_workspace_admin(roles)
+        join_requests = (
+            await pending_join_requests(session, tenant_id, idea_ids=[idea.id])
+            if is_owner_or_admin
+            else []
+        )
+        return IdeaSummaryRecord(
+            **bank_entry_fields(idea, contributor, category, subcategory, process_area, visibility),
+            team=teams.get(idea.id, []),
+            join_state=join_state,
+            join_requests=join_requests,
+            site=site if visibility.operational else None,
+            department=department if visibility.operational else None,
+            approval_journey=[
+                IdeaJourneyStage(
+                    stage_name=stage.stage_name,
+                    status=stage.status,
+                    round_number=stage.round_number,
+                    stage_order=stage.stage_order,
+                )
+                for stage in stages
+            ],
+            charter_available=idea.status
+            in {IdeaStatus.APPROVED, IdeaStatus.CHARTER_IN_PROGRESS, IdeaStatus.CHARTER_SUBMITTED},
+            charter_submitted=idea.status == IdeaStatus.CHARTER_SUBMITTED,
+            can_manage=manager,
+            shows_operational=visibility.operational,
+            shows_narrative=visibility.narrative,
+            shows_contributor=visibility.contributor,
+            shows_financials=visibility.financials,
+        )
 
 
 async def get_catalog(tenant_id: uuid.UUID, session: AsyncSession) -> IdeaSubmissionCatalog:
@@ -677,7 +813,6 @@ async def get_idea_bank_policy(
             await session.flush()
         return IdeaBankPolicySummary(
             detail_level=policy.detail_level,
-            show_contributor=policy.show_contributor,
             show_financials=policy.show_financials,
         )
 
@@ -692,7 +827,6 @@ async def update_idea_bank_policy(
             policy = IdeaBankPolicy(tenant_id=tenant_id)
             session.add(policy)
         policy.detail_level = command.detail_level
-        policy.show_contributor = command.show_contributor
         policy.show_financials = command.show_financials
         await session.flush()
         return IdeaBankPolicySummary(**command.model_dump())
@@ -767,7 +901,10 @@ async def get_home_workspace(
                 .order_by(IdeaApprovalStage.due_at.asc().nullslast())
             )
         ).all()
+        my_idea_ids = [idea.id for idea in ideas]
+        join_requests = await pending_join_requests(session, tenant_id, idea_ids=my_idea_ids)
         return HomeWorkspaceSummary(
+            join_requests=join_requests,
             ideas=[
                 HomeIdeaSummary(
                     id=idea.id,
@@ -878,14 +1015,9 @@ async def get_idea_detail(
             ).all()
         )
         is_submitter = idea.submitter_user_id == user_id
-        is_assignee = any(stage.assignee_user_id == user_id for stage in stages)
-        is_shared = idea.status in {
-            IdeaStatus.SUBMITTED,
-            IdeaStatus.APPROVED,
-            IdeaStatus.CHARTER_IN_PROGRESS,
-            IdeaStatus.CHARTER_SUBMITTED,
-        }
-        if not (is_shared or is_submitter or is_assignee or "tenant_admin" in roles):
+        # The full record ignores the Idea Bank visibility policy, so it is limited to the people who
+        # manage the idea. Everyone else reads the policy-filtered summary (get_idea_summary).
+        if not can_manage_idea(idea, stages, user_id, roles):
             raise IdeaAccessError
         charter = await session.scalar(
             select(ProjectCharter).where(
@@ -962,6 +1094,9 @@ async def get_idea_detail(
             ],
             charter_available=charter_available,
             charter=_charter_record(charter) if charter else None,
+            project_id=await session.scalar(
+                select(Project.id).where(Project.tenant_id == tenant_id, Project.idea_id == idea.id)
+            ),
             can_edit_charter=is_submitter
             and charter_available
             and idea.status != IdeaStatus.CHARTER_SUBMITTED,
@@ -1027,15 +1162,21 @@ async def decide_approval_stage(
                 next_stage.due_at = now + timedelta(hours=next_stage.sla_hours)
             else:
                 idea.status = IdeaStatus.APPROVED
-                charter = ProjectCharter(
-                    tenant_id=tenant_id,
-                    idea_id=idea.id,
-                    department_id=idea.department_id,
-                    site_id=idea.site_id,
-                    impact_areas=idea.impacts,
+                submitter = await session.get(User, idea.submitter_user_id)
+                charter = prefilled_charter(
+                    idea,
+                    leader=submitter,
+                    kpi_hint=await _subcategory_kpi(session, tenant_id, idea.subcategory_id),
                 )
                 session.add(charter)
-                submitter = await session.get(User, idea.submitter_user_id)
+                await session.flush()
+                await open_project_for_approved_idea(
+                    session,
+                    tenant_id=tenant_id,
+                    idea_id=idea.id,
+                    idea_reference=idea.reference,
+                    charter=charter,
+                )
                 tenant_record = await session.get(Tenant, tenant_id)
                 if submitter:
                     enqueue_email(
@@ -1121,6 +1262,7 @@ async def save_project_charter(
     session: AsyncSession,
     *,
     submit: bool = False,
+    autosave: bool = False,
 ) -> ProjectCharterRecord:
     async with session.begin():
         await apply_tenant_to_transaction(session, tenant_id)
@@ -1172,7 +1314,27 @@ async def save_project_charter(
                 ).all()
             )
         valid_membership_ids = [membership.id for membership, _ in selected_members]
-        payload = command.model_dump()
+        # Action items and the monthly tracker move to delivery; keep what exists unless sent.
+        payload = command.model_dump(
+            exclude={
+                field
+                for field in ("action_items", "monthly_tracking", "milestone_plan")
+                if field not in command.model_fields_set
+            }
+        )
+        if "milestone_plan" in payload:
+            # JSONB needs plain JSON values (no dates, decimals or UUIDs).
+            payload["milestone_plan"] = [
+                milestone.model_dump(mode="json") for milestone in command.milestone_plan
+            ]
+        for role in ("sponsor", "leader"):
+            person_id = payload.get(f"{role}_user_id")
+            if person_id is None:
+                continue
+            person = await _active_member_user(session, tenant_id, person_id)
+            if person is None:
+                raise IdeaValidationError(f"Choose an active workspace member as the {role}.")
+            payload[role] = person.display_name
         payload["team_membership_ids"] = valid_membership_ids
         if selected_members:
             selected_names = [user.display_name for _, user in selected_members]
@@ -1182,11 +1344,14 @@ async def save_project_charter(
         invitations_queued = 0
         invitations_skipped = len(command.team_membership_ids) - len(valid_membership_ids)
         if submit:
+            # Site and department are only required once the workspace has set them up.
+            has_sites = await _has_active_catalog_items(session, tenant_id, "site")
+            has_departments = await _has_active_catalog_items(session, tenant_id, "department")
             required = {
                 "sponsor or facilitator": command.sponsor.strip(),
                 "project or team leader": command.leader.strip(),
-                "department": command.department_id,
-                "site": command.site_id,
+                "department": command.department_id if has_departments else True,
+                "site": command.site_id if has_sites else True,
                 "start date": command.start_date,
                 "target completion": command.target_completion_date,
                 "KPI or metric": command.kpi_name.strip(),
@@ -1204,6 +1369,12 @@ async def save_project_charter(
                 raise IdeaValidationError(
                     f"Complete the charter before submission: {', '.join(missing)}."
                 )
+            plan = [CharterMilestone.model_validate(item) for item in charter.milestone_plan or []]
+            problems = milestone_plan_problems(
+                plan, command.start_date, command.target_completion_date, command.benefit_type
+            )
+            if problems:
+                raise IdeaValidationError(f"Fix the milestone plan: {' '.join(problems)}")
             charter.submitted_at = datetime.now(UTC)
             idea.status = IdeaStatus.CHARTER_SUBMITTED
             await session.flush()
@@ -1226,8 +1397,24 @@ async def save_project_charter(
                 idea=idea,
                 members=selected_members,
             )
+            await create_baseline_milestones(
+                session,
+                tenant_id=tenant_id,
+                project=project,
+                plan=plan,
+                start_date=command.start_date,
+                allowed_owner_ids={
+                    idea.submitter_user_id,
+                    *(user.id for _, user in selected_members),
+                    *([charter.leader_user_id] if charter.leader_user_id else []),
+                },
+            )
         elif idea.status == IdeaStatus.APPROVED:
             idea.status = IdeaStatus.CHARTER_IN_PROGRESS
+        if autosave and not submit:
+            await session.flush()
+            await session.refresh(charter)
+            return _charter_record(charter)
         record_audit_event(
             session,
             tenant_id=tenant_id,
@@ -1252,3 +1439,539 @@ async def save_project_charter(
                 "team_invitations_skipped": invitations_skipped,
             }
         )
+
+
+# --- Teams and requests to join -------------------------------------------------------------
+
+# Ideas people may ask to join: approved and heading into, or already in, delivery.
+JOINABLE_STATUSES = frozenset(
+    {IdeaStatus.APPROVED, IdeaStatus.CHARTER_IN_PROGRESS, IdeaStatus.CHARTER_SUBMITTED}
+)
+ACTIVE_TEAM_STATUSES = ("invited", "accepted")
+
+
+class JoinRequestError(Exception):
+    """A request to join that cannot be made or decided; the message is safe to show."""
+
+
+async def team_names_by_idea(
+    session: AsyncSession, tenant_id: uuid.UUID, idea_ids: list[uuid.UUID]
+) -> dict[uuid.UUID, list[str]]:
+    """Charter team names, then project team names, de-duplicated in order, for each idea."""
+    if not idea_ids:
+        return {}
+    teams: dict[uuid.UUID, list[str]] = {}
+    for idea_id, names in (
+        await session.execute(
+            select(ProjectCharter.idea_id, ProjectCharter.team_members).where(
+                ProjectCharter.tenant_id == tenant_id, ProjectCharter.idea_id.in_(idea_ids)
+            )
+        )
+    ).all():
+        teams.setdefault(idea_id, []).extend(name for name in names if name.strip())
+    for idea_id, name in (
+        await session.execute(
+            select(Project.idea_id, ProjectTeamMember.name_snapshot)
+            .join(ProjectTeamMember, ProjectTeamMember.project_id == Project.id)
+            .where(
+                Project.tenant_id == tenant_id,
+                Project.idea_id.in_(idea_ids),
+                ProjectTeamMember.status.in_(ACTIVE_TEAM_STATUSES),
+            )
+            .order_by(ProjectTeamMember.invited_at)
+        )
+    ).all():
+        teams.setdefault(idea_id, []).append(name)
+    return {idea_id: list(dict.fromkeys(names)) for idea_id, names in teams.items()}
+
+
+async def _active_membership(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> Membership | None:
+    return await session.scalar(
+        select(Membership).where(
+            Membership.tenant_id == tenant_id,
+            Membership.user_id == user_id,
+            Membership.status == MembershipStatus.ACTIVE,
+        )
+    )
+
+
+async def _is_team_member(
+    session: AsyncSession, tenant_id: uuid.UUID, idea: Idea, user_id: uuid.UUID
+) -> bool:
+    membership = await _active_membership(session, tenant_id, user_id)
+    if membership is not None:
+        team_ids = await session.scalar(
+            select(ProjectCharter.team_membership_ids).where(
+                ProjectCharter.tenant_id == tenant_id, ProjectCharter.idea_id == idea.id
+            )
+        )
+        if team_ids and membership.id in team_ids:
+            return True
+    on_project = await session.scalar(
+        select(ProjectTeamMember.id)
+        .join(Project, Project.id == ProjectTeamMember.project_id)
+        .where(
+            Project.tenant_id == tenant_id,
+            Project.idea_id == idea.id,
+            ProjectTeamMember.user_id == user_id,
+            ProjectTeamMember.status.in_(ACTIVE_TEAM_STATUSES),
+        )
+        .limit(1)
+    )
+    return on_project is not None
+
+
+def join_state_for(
+    *,
+    is_owner: bool,
+    is_member: bool,
+    has_pending: bool,
+    joinable: bool,
+    may_contribute: bool,
+) -> JoinState:
+    """The viewer's relationship to an idea's team, in priority order."""
+    if is_owner:
+        return "owner"
+    if is_member:
+        return "member"
+    if has_pending:
+        return "pending"
+    if not joinable:
+        return "closed"
+    if not may_contribute:
+        return "not_allowed"
+    return "available"
+
+
+async def viewer_join_state(
+    session: AsyncSession, tenant_id: uuid.UUID, idea: Idea, user_id: uuid.UUID, roles: list[str]
+) -> JoinState:
+    pending = await session.scalar(
+        select(IdeaJoinRequest.id).where(
+            IdeaJoinRequest.tenant_id == tenant_id,
+            IdeaJoinRequest.idea_id == idea.id,
+            IdeaJoinRequest.requester_user_id == user_id,
+            IdeaJoinRequest.status == JoinRequestStatus.PENDING.value,
+        )
+    )
+    return join_state_for(
+        is_owner=idea.submitter_user_id == user_id,
+        is_member=await _is_team_member(session, tenant_id, idea, user_id),
+        has_pending=pending is not None,
+        joinable=idea.status in JOINABLE_STATUSES,
+        may_contribute=can_contribute(roles),
+    )
+
+
+async def pending_join_requests(
+    session: AsyncSession, tenant_id: uuid.UUID, *, idea_ids: list[uuid.UUID]
+) -> list[JoinRequestRecord]:
+    if not idea_ids:
+        return []
+    rows = (
+        await session.execute(
+            select(IdeaJoinRequest, Idea.reference, Idea.title, User.display_name, User.email)
+            .join(Idea, Idea.id == IdeaJoinRequest.idea_id)
+            .join(User, User.id == IdeaJoinRequest.requester_user_id)
+            .where(
+                IdeaJoinRequest.tenant_id == tenant_id,
+                IdeaJoinRequest.idea_id.in_(idea_ids),
+                IdeaJoinRequest.status == JoinRequestStatus.PENDING.value,
+            )
+            .order_by(IdeaJoinRequest.created_at)
+        )
+    ).all()
+    return [
+        JoinRequestRecord(
+            id=request.id,
+            idea_id=request.idea_id,
+            idea_reference=reference,
+            idea_title=title,
+            requester_name=name,
+            requester_email=email,
+            message=request.message,
+            status=request.status,
+            created_at=request.created_at,
+        )
+        for request, reference, title, name, email in rows
+    ]
+
+
+async def request_to_join(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    idea_id: uuid.UUID,
+    command: JoinRequestCommand,
+    session: AsyncSession,
+) -> JoinState:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        idea = await session.scalar(
+            select(Idea).where(Idea.tenant_id == tenant_id, Idea.id == idea_id)
+        )
+        if idea is None:
+            raise IdeaNotFoundError
+        state = await viewer_join_state(session, tenant_id, idea, user_id, roles)
+        if state != "available":
+            raise JoinRequestError(
+                {
+                    "owner": "You already own this idea.",
+                    "member": "You're already on this team.",
+                    "pending": "You've already asked to join. The owner will reply soon.",
+                    "closed": "You can ask to join once the idea is approved.",
+                    "not_allowed": "Viewers can't join improvement teams.",
+                }[state]
+            )
+        membership = await _active_membership(session, tenant_id, user_id)
+        if membership is None:
+            raise IdeaAccessError
+        request = IdeaJoinRequest(
+            tenant_id=tenant_id,
+            idea_id=idea.id,
+            requester_user_id=user_id,
+            membership_id=membership.id,
+            message=command.message.strip(),
+        )
+        session.add(request)
+        await session.flush()
+        record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+            subject_user_id=idea.submitter_user_id,
+            event_type="idea.join_requested",
+            entity_type="idea",
+            entity_id=idea.id,
+            entity_reference=idea.reference,
+            summary=f"Asked to join the team for {idea.reference}.",
+            details={"request_id": str(request.id)},
+        )
+        return "pending"
+
+
+async def withdraw_join_request(
+    tenant_id: uuid.UUID, user_id: uuid.UUID, idea_id: uuid.UUID, session: AsyncSession
+) -> None:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        request = await session.scalar(
+            select(IdeaJoinRequest)
+            .where(
+                IdeaJoinRequest.tenant_id == tenant_id,
+                IdeaJoinRequest.idea_id == idea_id,
+                IdeaJoinRequest.requester_user_id == user_id,
+                IdeaJoinRequest.status == JoinRequestStatus.PENDING.value,
+            )
+            .with_for_update()
+        )
+        if request is None:
+            raise IdeaNotFoundError
+        request.status = JoinRequestStatus.WITHDRAWN.value
+        request.decided_at = datetime.now(UTC)
+
+
+async def decide_join_request(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    roles: list[str],
+    idea_id: uuid.UUID,
+    request_id: uuid.UUID,
+    *,
+    accept: bool,
+    session: AsyncSession,
+) -> None:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        idea = await session.scalar(
+            select(Idea).where(Idea.tenant_id == tenant_id, Idea.id == idea_id).with_for_update()
+        )
+        if idea is None:
+            raise IdeaNotFoundError
+        if idea.submitter_user_id != user_id and not is_workspace_admin(roles):
+            raise IdeaAccessError
+        request = await session.scalar(
+            select(IdeaJoinRequest)
+            .where(
+                IdeaJoinRequest.tenant_id == tenant_id,
+                IdeaJoinRequest.idea_id == idea_id,
+                IdeaJoinRequest.id == request_id,
+            )
+            .with_for_update()
+        )
+        if request is None:
+            raise IdeaNotFoundError
+        if request.status != JoinRequestStatus.PENDING.value:
+            raise JoinRequestError("This request has already been answered.")
+        requester = await session.get(User, request.requester_user_id)
+        membership = await session.get(Membership, request.membership_id)
+        if accept:
+            if idea.status not in JOINABLE_STATUSES:
+                raise JoinRequestError("This idea is no longer taking new team members.")
+            if (
+                requester is None
+                or membership is None
+                or membership.status != MembershipStatus.ACTIVE
+            ):
+                raise JoinRequestError("This person no longer has access to the workspace.")
+            await _add_to_team(session, tenant_id, idea, membership, requester)
+        request.status = (
+            JoinRequestStatus.ACCEPTED if accept else JoinRequestStatus.DECLINED
+        ).value
+        request.decided_by_user_id = user_id
+        request.decided_at = datetime.now(UTC)
+        record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_user_id=user_id,
+            subject_user_id=request.requester_user_id,
+            event_type="idea.join_accepted" if accept else "idea.join_declined",
+            entity_type="idea",
+            entity_id=idea.id,
+            entity_reference=idea.reference,
+            summary=(
+                f"{'Added' if accept else 'Declined'} "
+                f"{requester.display_name if requester else 'a colleague'} "
+                f"{'to' if accept else 'for'} the team for {idea.reference}."
+            ),
+            details={"request_id": str(request.id)},
+        )
+
+
+async def _add_to_team(
+    session: AsyncSession, tenant_id: uuid.UUID, idea: Idea, membership: Membership, user: User
+) -> None:
+    """Charter team before delivery starts; the project team once the charter is submitted."""
+    if idea.status == IdeaStatus.CHARTER_SUBMITTED:
+        project = await session.scalar(
+            select(Project).where(Project.tenant_id == tenant_id, Project.idea_id == idea.id)
+        )
+        if project is None:
+            raise JoinRequestError("The project for this idea could not be found.")
+        existing = await session.scalar(
+            select(ProjectTeamMember).where(
+                ProjectTeamMember.project_id == project.id,
+                ProjectTeamMember.membership_id == membership.id,
+            )
+        )
+        now = datetime.now(UTC)
+        if existing is None:
+            session.add(
+                ProjectTeamMember(
+                    tenant_id=tenant_id,
+                    project_id=project.id,
+                    membership_id=membership.id,
+                    user_id=user.id,
+                    name_snapshot=user.display_name,
+                    email_snapshot=user.email,
+                    status="accepted",
+                    invited_at=now,
+                    responded_at=now,
+                )
+            )
+        else:
+            existing.status, existing.responded_at = "accepted", now
+        return
+    charter = await session.scalar(
+        select(ProjectCharter)
+        .where(ProjectCharter.tenant_id == tenant_id, ProjectCharter.idea_id == idea.id)
+        .with_for_update()
+    )
+    if charter is None:
+        charter = ProjectCharter(tenant_id=tenant_id, idea_id=idea.id)
+        session.add(charter)
+    if membership.id not in (charter.team_membership_ids or []):
+        charter.team_membership_ids = [*(charter.team_membership_ids or []), membership.id]
+    names = list(charter.team_members or [])
+    if user.display_name not in names:
+        charter.team_members = [*names, user.display_name]
+
+
+# --- Project charter ---------------------------------------------------------------------------
+
+
+def benefit_type_for(saving: Decimal | None, avoidance: Decimal | None) -> str:
+    """The charter's benefit type, read from the money the idea estimated."""
+    has_saving, has_avoidance = bool(saving and saving > 0), bool(avoidance and avoidance > 0)
+    if has_saving and has_avoidance:
+        return "both"
+    if has_saving:
+        return "cost_saving"
+    if has_avoidance:
+        return "cost_avoidance"
+    return "kpi_only"
+
+
+def prefilled_charter(idea: Idea, *, leader: User | None, kpi_hint: str) -> ProjectCharter:
+    """A draft charter that reuses everything the approved idea already told us."""
+    return ProjectCharter(
+        tenant_id=idea.tenant_id,
+        idea_id=idea.id,
+        sponsor="",
+        leader=leader.display_name if leader else "",
+        leader_user_id=leader.id if leader else None,
+        department_id=idea.department_id,
+        site_id=idea.site_id,
+        target_completion_date=idea.target_completion_date,
+        impact_areas=list(idea.impacts or []),
+        benefit_type=benefit_type_for(idea.estimated_annual_saving, idea.cost_avoidance),
+        kpi_name=kpi_hint[:160],
+        budget_approved=idea.investment_required,
+        team_members=[],
+        team_membership_ids=[],
+        action_items=[],
+        monthly_tracking=[],
+    )
+
+
+async def _subcategory_kpi(
+    session: AsyncSession, tenant_id: uuid.UUID, subcategory_id: uuid.UUID | None
+) -> str:
+    if subcategory_id is None:
+        return ""
+    guidance = await session.scalar(
+        select(ConfigurationItem.guidance).where(
+            ConfigurationItem.tenant_id == tenant_id, ConfigurationItem.id == subcategory_id
+        )
+    )
+    return str((guidance or {}).get("kpi") or "")
+
+
+async def _active_member_user(
+    session: AsyncSession, tenant_id: uuid.UUID, user_id: uuid.UUID
+) -> User | None:
+    return await session.scalar(
+        select(User)
+        .join(Membership, Membership.user_id == User.id)
+        .where(
+            User.id == user_id,
+            Membership.tenant_id == tenant_id,
+            Membership.status == MembershipStatus.ACTIVE,
+        )
+    )
+
+
+async def get_charter_workspace(
+    tenant_id: uuid.UUID, user_id: uuid.UUID, project_id: uuid.UUID, session: AsyncSession
+) -> CharterWorkspaceRecord:
+    """Everything the charter page needs: the charter, the approved idea it builds on, and rights."""
+    site = aliased(ConfigurationItem)
+    department = aliased(ConfigurationItem)
+    category = aliased(ConfigurationItem)
+    subcategory = aliased(ConfigurationItem)
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        row = (
+            await session.execute(
+                select(
+                    Project,
+                    Idea,
+                    ProjectCharter,
+                    User.display_name,
+                    site.name,
+                    department.name,
+                    category.name,
+                    subcategory.name,
+                    subcategory.guidance,
+                )
+                .join(Idea, Idea.id == Project.idea_id)
+                .join(ProjectCharter, ProjectCharter.idea_id == Idea.id)
+                .join(User, User.id == Idea.submitter_user_id)
+                .outerjoin(site, site.id == Idea.site_id)
+                .outerjoin(department, department.id == Idea.department_id)
+                .outerjoin(category, category.id == Idea.category_id)
+                .outerjoin(subcategory, subcategory.id == Idea.subcategory_id)
+                .where(Project.tenant_id == tenant_id, Project.id == project_id)
+            )
+        ).one_or_none()
+        if row is None:
+            raise IdeaNotFoundError
+        (
+            project,
+            idea,
+            charter,
+            submitter_name,
+            site_name,
+            department_name,
+            category_name,
+            subcategory_name,
+            guidance,
+        ) = row
+        return CharterWorkspaceRecord(
+            project_id=project.id,
+            project_reference=project.reference,
+            project_status=project.status,
+            can_edit=idea.submitter_user_id == user_id and charter.submitted_at is None,
+            charter=_charter_record(charter),
+            idea=CharterIdeaContext(
+                id=idea.id,
+                reference=idea.reference,
+                title=idea.title,
+                idea_type=idea.idea_type,
+                project_subtype=idea.project_subtype,
+                submitter_name=submitter_name,
+                submitter_user_id=idea.submitter_user_id,
+                site_id=idea.site_id,
+                site=site_name,
+                department_id=idea.department_id,
+                department=department_name,
+                category=category_name,
+                subcategory=subcategory_name,
+                impacts=list(idea.impacts or []),
+                current_state=idea.current_state,
+                baseline_uom=idea.baseline_uom,
+                target_state=idea.target_state,
+                target_uom=idea.target_uom,
+                target_completion_date=idea.target_completion_date,
+                estimated_annual_saving=idea.estimated_annual_saving,
+                cost_avoidance=idea.cost_avoidance,
+                investment_required=idea.investment_required,
+                kpi_hint=str((guidance or {}).get("kpi") or ""),
+                suggested_benefit_type=benefit_type_for(
+                    idea.estimated_annual_saving, idea.cost_avoidance
+                ),
+            ),
+        )
+
+
+async def _has_active_catalog_items(session: AsyncSession, tenant_id: uuid.UUID, kind: str) -> bool:
+    count = await session.scalar(
+        select(func.count(ConfigurationItem.id)).where(
+            ConfigurationItem.tenant_id == tenant_id,
+            ConfigurationItem.kind == kind,
+            ConfigurationItem.is_active.is_(True),
+        )
+    )
+    return bool(count)
+
+
+def milestone_plan_problems(
+    plan: list[CharterMilestone], start: date | None, target: date | None, benefit_type: str
+) -> list[str]:
+    """Plain-language reasons a charter's milestone plan can't be submitted yet."""
+    if not plan:
+        return ["Add at least one milestone."]
+    problems: list[str] = []
+    if any(not milestone.title.strip() for milestone in plan):
+        problems.append("Every milestone needs a title.")
+    if any(milestone.due_date is None for milestone in plan):
+        problems.append("Every milestone needs a due date.")
+    outside = [
+        milestone.title or "Untitled"
+        for milestone in plan
+        if milestone.due_date
+        and ((start and milestone.due_date < start) or (target and milestone.due_date > target))
+    ]
+    if outside:
+        problems.append(f"Due dates must fall within the charter dates ({', '.join(outside)}).")
+    total = sum((milestone.weight for milestone in plan), Decimal(0))
+    if total != 100:
+        problems.append(f"Weights must total 100% (now {total.normalize():f}%).")
+    starts = sum(1 for milestone in plan if milestone.benefits_start)
+    if benefit_type != "kpi_only" and starts != 1:
+        problems.append("Mark the one milestone after which benefits start.")
+    elif starts > 1:
+        problems.append("Only one milestone can mark when benefits start.")
+    return problems

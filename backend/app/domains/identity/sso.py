@@ -20,6 +20,7 @@ from app.core.urls import preferences_link, tenant_frontend_url
 from app.domains.communications.controllers import enqueue_email
 from app.domains.communications.models import EmailDelivery
 from app.domains.communications.schemas import EmailMessage
+from app.domains.identity.access import WORKSPACE_OWNER, is_workspace_owner
 from app.domains.identity.controllers import (
     ClientContext,
     IssuedSession,
@@ -472,8 +473,8 @@ async def complete_sso(
             )
         )
         if login_state.purpose == "validate":
-            if user.id != login_state.initiated_by_user_id or "tenant_admin" not in roles:
-                raise SSOAuthenticationError("The validating Microsoft account must match the tenant administrator.")
+            if user.id != login_state.initiated_by_user_id or not is_workspace_owner(roles):
+                raise SSOAuthenticationError("The validating Microsoft account must match the Workspace Owner.")
             config = await _configuration(session, tenant.tenant_id, for_update=True)
             if config is None:
                 raise SSOAuthenticationError("The SSO configuration no longer exists.")
@@ -913,12 +914,12 @@ async def issue_recovery(
                     Membership.id == command.membership_id,
                     Membership.tenant_id == tenant.tenant_id,
                     Membership.status == MembershipStatus.ACTIVE,
-                    Role.key == "tenant_admin",
+                    Role.key == WORKSPACE_OWNER,
                 )
             )
         ).one_or_none()
         if row is None:
-            raise SSOConfigurationError("Select an active tenant administrator for recovery.")
+            raise SSOConfigurationError("Select an active Workspace Owner for recovery.")
         _, user = row
         session.add(
             SSORecoveryToken(

@@ -1,40 +1,12 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import { Moon, Sun } from "lucide-react";
+import { setTheme, useTheme, type Theme } from "@/lib/theme";
 import styles from "./landing.module.css";
 
-type Theme = "light" | "dark";
-
-const themeEvent = "transpire-theme-change";
-
-function subscribe(callback: () => void) {
-  window.addEventListener(themeEvent, callback);
-  return () => window.removeEventListener(themeEvent, callback);
-}
-
-function getTheme(): Theme {
-  return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
-}
-
-function getServerTheme(): Theme {
-  return "light";
-}
-
 export function ThemeToggle() {
-  const theme = useSyncExternalStore(subscribe, getTheme, getServerTheme);
-
-  const selectTheme = (selectedTheme: Theme) => {
-    if (selectedTheme === theme) return;
-
-    document.documentElement.dataset.theme = selectedTheme;
-    try {
-      window.localStorage.setItem("transpire-theme", selectedTheme);
-    } catch {
-      // The selected theme still applies for the current page when storage is unavailable.
-    }
-    window.dispatchEvent(new Event(themeEvent));
-  };
+  const theme = useTheme();
+  const selectTheme = (selectedTheme: Theme) => setTheme(selectedTheme);
 
   return (
     <fieldset

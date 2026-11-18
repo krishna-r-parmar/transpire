@@ -1,5 +1,5 @@
 /* Idea submission. Tokens (--ink, --muted, --line, --tp-*) come from AdminShell (.app). */
-.loading { display: grid; min-height: 100svh; place-content: center; background: oklch(98.5% .006 240); color: oklch(45% .03 248); font-size: .875rem; font-weight: 750; }
+.loading { display: grid; min-height: 100svh; place-content: center; background: var(--field); color: var(--muted); font-size: var(--tp-text-sm); font-weight: 750; }
 
 /* Stepper */
 .stepNavigation { margin: -.5rem 0 1.5rem; }
@@ -22,7 +22,6 @@
 .toastStack { position: fixed; z-index: 60; top: 6.5rem; right: clamp(1rem, 3vw, 2.5rem); width: min(26rem, calc(100vw - 2rem)); outline: none; filter: drop-shadow(0 .8rem 1.5rem oklch(25% .05 250 / .16)); }
 .sectionHeading { display: flex; align-items: flex-start; gap: .9rem; margin-bottom: 1.5rem; }
 .sectionHeading > span { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 auto; border-radius: .25rem; background: var(--tp-blue-soft); color: var(--blue-deep); place-items: center; }
-.sectionHeading p { margin: 0 0 .2rem; color: var(--blue-deep); font-size: var(--tp-text-xs); font-weight: 820; letter-spacing: .08em; text-transform: uppercase; }
 .sectionHeading h2 { margin: 0; color: var(--ink); font-size: 1.3rem; letter-spacing: -.025em; line-height: 1.25; }
 .sectionHeading small { display: block; max-width: 72ch; margin-top: .4rem; color: var(--muted); font-size: var(--tp-text-md); line-height: 1.55; }
 
@@ -82,9 +81,9 @@ button[data-active="true"] .radioDot::after { width: .6rem; height: .6rem; borde
 .guidanceLead strong { color: var(--blue-deep); font-size: var(--tp-text-md); }
 .guidanceLead p, .guidanceEmpty p { margin: .2rem 0 0; color: var(--muted); font-size: var(--tp-text-sm); line-height: 1.5; }
 .guidance dl { display: grid; margin: 0; padding: .3rem 1.1rem .8rem; }
-.guidance dl div { display: grid; gap: .2rem; border-bottom: 1px solid oklch(87% .03 242); padding: .65rem 0; }
+.guidance dl div { display: grid; gap: .2rem; border-bottom: 1px solid var(--line); padding: .65rem 0; }
 .guidance dl div:last-child { border-bottom: 0; }
-.guidance dt, .reviewFact > span, .reviewTitle > span { color: var(--muted); font-size: var(--tp-text-xs); font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+.guidance dt, .reviewFact > span, .reviewTitle > span { color: var(--muted); font-size: var(--tp-text-xs); font-weight: 800; }
 .guidance dt { color: var(--blue-deep); }
 .guidance dd { margin: 0; color: var(--ink); font-size: var(--tp-text-sm); line-height: 1.5; }
 .guidanceEmpty { display: flex; gap: .7rem; margin-top: 1.25rem; border: 1px dashed var(--tp-line-strong); padding: 1rem 1.1rem; background: var(--paper); }
@@ -99,18 +98,18 @@ button[data-active="true"] .radioDot::after { width: .6rem; height: .6rem; borde
 .field > span:first-child b { border-radius: 999px; padding: .05rem .5rem; background: var(--tp-blue-soft); color: var(--blue-deep); }
 .field > span:first-child em { color: var(--muted); font-weight: 600; }
 .field > small { color: var(--muted); font-size: var(--tp-text-xs); line-height: 1.45; }
-.field > input, .field > textarea, .moneyInput { width: 100%; min-height: 3rem; border: 1px solid oklch(82% .028 242); border-radius: .25rem; outline: none; background: var(--paper); color: var(--ink); transition: border-color 180ms ease-out, box-shadow 180ms ease-out, background 180ms ease-out; }
+.field > input, .field > textarea, .moneyInput { width: 100%; min-height: 3rem; border: 1px solid var(--line); border-radius: .25rem; outline: none; background: var(--paper); color: var(--ink); transition: border-color 180ms ease-out, box-shadow 180ms ease-out, background 180ms ease-out; }
 .field > input, .field > textarea { padding: .65rem .8rem; font: 500 var(--tp-text-md)/1.5 Aptos, "Segoe UI Variable", "Segoe UI", sans-serif; }
 .field > textarea { min-height: 9rem; resize: vertical; }
-.field > input:hover, .field > textarea:hover, .moneyInput:hover, .measureInput:hover { border-color: oklch(70% .045 242); }
+.field > input:hover, .field > textarea:hover, .moneyInput:hover, .measureInput:hover { border-color: var(--tp-line-strong); }
 .field > input:focus, .field > textarea:focus, .moneyInput:focus-within, .measureInput:focus-within { border-color: var(--blue); background: var(--tp-surface); box-shadow: 0 0 0 3px oklch(59% .14 242 / .14); }
 .field[data-invalid="true"] > input, .field[data-invalid="true"] > textarea { border-color: var(--tp-danger); background: var(--tp-danger-soft); box-shadow: 0 0 0 3px oklch(53% .19 25 / .12); }
 .field[data-invalid="true"] > span:first-child strong { color: var(--tp-danger); }
-.field input::placeholder, .field textarea::placeholder { color: oklch(56% .02 248); }
+.field input::placeholder, .field textarea::placeholder { color: var(--subtle); }
 .fieldMeta { display: flex; min-height: 1.2rem; align-items: flex-start; justify-content: space-between; gap: .75rem; }
 .fieldMeta i, .fieldMeta em { color: var(--muted); font-size: var(--tp-text-xs); font-style: normal; line-height: 1.45; }
 .fieldMeta em { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
-.measureInput { display: grid; overflow: hidden; border: 1px solid oklch(82% .028 242); border-radius: .25rem; background: var(--paper); grid-template-columns: minmax(0, 1fr) minmax(7.5rem, .36fr); transition: border-color 180ms ease-out, box-shadow 180ms ease-out, background 180ms ease-out; }
+.measureInput { display: grid; overflow: hidden; border: 1px solid var(--line); border-radius: .25rem; background: var(--paper); grid-template-columns: minmax(0, 1fr) minmax(7.5rem, .36fr); transition: border-color 180ms ease-out, box-shadow 180ms ease-out, background 180ms ease-out; }
 .measureInput input { width: 100%; min-width: 0; min-height: 3rem; border: 0; padding: .65rem .8rem; outline: none; background: transparent; color: var(--ink); font: 500 var(--tp-text-md)/1.5 Aptos, "Segoe UI Variable", "Segoe UI", sans-serif; }
 .measureInput input:last-child { border-left: 1px solid var(--line); background: var(--panel); font-size: var(--tp-text-sm); }
 .moneyInput { display: flex; align-items: center; padding: 0 .8rem; }
@@ -129,7 +128,7 @@ button[data-active="true"] .radioDot::after { width: .6rem; height: .6rem; borde
 
 /* SQDCP toggles */
 .impactSet { display: grid; gap: .6rem; border: 0; margin: 0; padding: 0; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); }
-.impactSet button { display: grid; min-height: 3.75rem; cursor: pointer; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .65rem; border: 1px solid oklch(82% .028 242); border-radius: .25rem; padding: .55rem .7rem .55rem .55rem; outline: none; background: var(--paper); color: var(--ink); font: inherit; text-align: left; transition: border-color 180ms ease-out, background 180ms ease-out, box-shadow 180ms ease-out; }
+.impactSet button { display: grid; min-height: 3.75rem; cursor: pointer; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: .65rem; border: 1px solid var(--line); border-radius: .25rem; padding: .55rem .7rem .55rem .55rem; outline: none; background: var(--paper); color: var(--ink); font: inherit; text-align: left; transition: border-color 180ms ease-out, background 180ms ease-out, box-shadow 180ms ease-out; }
 .impactSet button:hover { border-color: var(--tp-line-strong); }
 .impactSet button:focus-visible { border-color: var(--blue); box-shadow: 0 0 0 3px oklch(59% .14 242 / .2); }
 .impactSet button > span { display: grid; width: 2rem; height: 2rem; border-radius: .2rem; background: var(--panel); color: var(--blue-deep); font-size: var(--tp-text-sm); font-weight: 800; place-items: center; }
@@ -204,7 +203,7 @@ button[data-active="true"] .radioDot::after { width: .6rem; height: .6rem; borde
 .saved { display: inline-flex; flex: 1 1 auto; align-items: center; gap: .4rem; color: var(--muted); font-size: var(--tp-text-xs); }
 .saved[data-saved="true"] svg { color: var(--tp-success); }
 .primary, .secondary, .success a { display: inline-flex; min-height: 2.75rem; cursor: pointer; align-items: center; justify-content: center; gap: .45rem; border-radius: .25rem; padding: .55rem 1rem; outline: none; font: inherit; font-size: var(--tp-text-sm); font-weight: 760; text-decoration: none; transition: border-color 180ms ease-out, background 180ms ease-out, box-shadow 180ms ease-out, transform 180ms ease-out; }
-.primary { border: 1px solid var(--blue); background: var(--blue); color: oklch(98% .006 240); }
+.primary { border: 1px solid var(--blue); background: var(--blue); color: var(--on-accent); }
 .primary:hover { border-color: var(--blue-deep); background: var(--blue-deep); }
 .secondary { border: 1px solid var(--tp-line-strong); background: var(--tp-surface); color: var(--ink); }
 .secondary:hover { background: var(--tp-blue-soft); }
@@ -218,7 +217,7 @@ button[data-active="true"] .radioDot::after { width: .6rem; height: .6rem; borde
 /* Success */
 .success { display: flex; gap: 1rem; border: 1px solid var(--tp-success-line); border-radius: .4rem; padding: 1.5rem; background: var(--tp-success-soft); }
 .success > svg { flex: 0 0 auto; color: var(--tp-success); }
-.successEyebrow { margin: 0 0 .25rem !important; color: var(--tp-success) !important; font-size: var(--tp-text-xs) !important; font-weight: 820; letter-spacing: .08em; text-transform: uppercase; }
+.successEyebrow { margin: 0 0 .25rem !important; color: var(--tp-success) !important; font-size: var(--tp-text-xs) !important; font-weight: 820; }
 .success h2 { margin: 0; font-size: 1.25rem; letter-spacing: -.02em; }
 .success p { max-width: 68ch; margin: .5rem 0 1rem; color: var(--muted); font-size: var(--tp-text-md); line-height: 1.55; }
 .success div div { display: flex; flex-wrap: wrap; gap: .5rem; }
@@ -227,7 +226,7 @@ button[data-active="true"] .radioDot::after { width: .6rem; height: .6rem; borde
 
 /* Correction banner */
 .correctionBanner { display: grid; align-items: center; gap: .85rem; border: 1px solid var(--tp-warning-line); border-radius: .4rem; margin-bottom: 1.5rem; padding: 1rem 1.1rem; background: var(--tp-warning-soft); color: var(--tp-warning); grid-template-columns: auto minmax(0, 1fr) auto; }
-.correctionBanner p { margin: 0 0 .15rem; color: var(--tp-warning); font-size: var(--tp-text-xs); font-weight: 820; letter-spacing: .06em; text-transform: uppercase; }
+.correctionBanner p { margin: 0 0 .15rem; color: var(--tp-warning); font-size: var(--tp-text-xs); font-weight: 820; }
 .correctionBanner h2 { margin: 0; color: var(--ink); font-size: var(--tp-text-lg); }
 .correctionBanner span { display: block; max-width: 70ch; margin-top: .25rem; color: var(--ink); font-size: var(--tp-text-sm); line-height: 1.5; }
 .correctionBanner > a { display: inline-flex; min-height: 2.75rem; align-items: center; border: 1px solid var(--tp-warning-line); border-radius: .25rem; padding: .5rem .85rem; background: var(--tp-surface); color: var(--tp-warning); font-size: var(--tp-text-sm); font-weight: 760; text-decoration: none; }
@@ -280,3 +279,25 @@ button[data-active="true"] .radioDot::after { width: .6rem; height: .6rem; borde
   .form > section, .progressiveBlock { animation: none; }
   .typeChoice > button, .impactSet button, .primary, .secondary, .field > input, .field > textarea, .moneyInput, .measureInput { transition: none; }
 }
+
+/*
+ * Workspace refresh: a progress-bar stepper instead of a boxed segmented control, lighter section chrome,
+ * and form groups as soft surfaces. Rules sit last so they override the originals above.
+ */
+.steps { gap: .75rem; overflow: visible; border: 0; border-radius: 0; background: transparent; }
+.steps li { min-height: 0; align-items: flex-start; border-top: 4px solid var(--line); padding: .75rem 0 0; }
+.steps li + li { border-left: 0; }
+.steps li > span { width: 1.75rem; height: 1.75rem; border-width: 0; background: var(--panel); font-size: var(--tp-text-xs); }
+.steps li[data-active="true"] { border-top-color: var(--blue); background: transparent; box-shadow: none; }
+.steps li[data-active="true"] > span { background: var(--blue); color: var(--on-accent); }
+.steps li[data-active="true"] strong { color: var(--ink); }
+.steps li[data-complete="true"] { border-top-color: var(--tp-success-line); }
+.steps li[data-complete="true"] > span { background: var(--tp-success-soft); color: var(--tp-success); }
+
+.sectionHeading > span { display: none; }
+.sectionHeading h2 { font-size: 1.5rem; letter-spacing: -.03em; }
+
+.formSection, .reviewGroup { border-color: var(--line); border-radius: var(--radius-overlay); }
+.formSection > header, .reviewGroup > header { border-bottom: 0; padding: 1.25rem 1.25rem 0; }
+.formSection > header > span { width: 1.75rem; height: 1.75rem; border-radius: 50%; background: transparent; color: var(--blue); }
+.formSection > header b { border: 0; background: var(--panel); color: var(--muted); font-weight: 650; }

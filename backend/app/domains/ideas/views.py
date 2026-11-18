@@ -1,4 +1,5 @@
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 
@@ -6,19 +7,24 @@ from app.domains.ideas.controllers import (
     IdeaAccessError,
     IdeaNotFoundError,
     IdeaValidationError,
+    JoinRequestError,
     decide_approval_stage,
+    decide_join_request,
     delete_draft_idea,
     get_catalog,
     get_editable_idea,
     get_home_workspace,
     get_idea_bank_policy,
     get_idea_detail,
+    get_idea_summary,
     list_idea_bank,
+    request_to_join,
     resubmit_idea,
     save_idea,
     save_project_charter,
     submit_idea,
     update_idea_bank_policy,
+    withdraw_join_request,
 )
 from app.domains.ideas.fx import ExchangeRateUnavailableError, get_inr_usd_rate
 from app.domains.ideas.schemas import (
@@ -32,12 +38,15 @@ from app.domains.ideas.schemas import (
     IdeaDetailRecord,
     IdeaRecord,
     IdeaSubmissionCatalog,
+    IdeaSummaryRecord,
     IdeaUpsertCommand,
+    JoinRequestCommand,
     ProjectCharterCommand,
     ProjectCharterRecord,
 )
 from app.domains.identity.dependencies import (
     AuthenticatedIdentity,
+    ContributorIdentity,
     SessionDependency,
     SettingsDependency,
     TenantAdminIdentity,
@@ -95,6 +104,90 @@ async def read_editable_idea(
         raise HTTPException(status_code=404, detail="Editable idea not found.") from error
 
 
+@router.get("/{idea_id}/summary", response_model=IdeaSummaryRecord)
+async def read_idea_summary(
+    idea_id: uuid.UUID,
+    identity: AuthenticatedIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> IdeaSummaryRecord:
+    try:
+        return await get_idea_summary(
+            tenant.tenant_id, identity.user.id, identity.roles, idea_id, session
+        )
+    except IdeaNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Idea not found.") from error
+    except IdeaAccessError as error:
+        raise HTTPException(
+            status_code=403, detail="This idea is not shared in the Idea Bank."
+        ) from error
+
+
+@router.post("/{idea_id}/join-requests", status_code=status.HTTP_201_CREATED)
+async def ask_to_join_idea(
+    idea_id: uuid.UUID,
+    command: JoinRequestCommand,
+    identity: ContributorIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> dict[str, str]:
+    try:
+        state = await request_to_join(
+            tenant.tenant_id, identity.user.id, identity.roles, idea_id, command, session
+        )
+    except IdeaNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Idea not found.") from error
+    except IdeaAccessError as error:
+        raise HTTPException(status_code=403, detail="You can't join this team.") from error
+    except JoinRequestError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    return {"join_state": state}
+
+
+@router.delete("/{idea_id}/join-requests/mine", status_code=status.HTTP_204_NO_CONTENT)
+async def withdraw_my_join_request(
+    idea_id: uuid.UUID,
+    identity: AuthenticatedIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> None:
+    try:
+        await withdraw_join_request(tenant.tenant_id, identity.user.id, idea_id, session)
+    except IdeaNotFoundError as error:
+        raise HTTPException(status_code=404, detail="No open request to withdraw.") from error
+
+
+@router.post(
+    "/{idea_id}/join-requests/{request_id}/{decision}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def answer_join_request(
+    idea_id: uuid.UUID,
+    request_id: uuid.UUID,
+    decision: Literal["accept", "decline"],
+    identity: AuthenticatedIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> None:
+    try:
+        await decide_join_request(
+            tenant.tenant_id,
+            identity.user.id,
+            identity.roles,
+            idea_id,
+            request_id,
+            accept=decision == "accept",
+            session=session,
+        )
+    except IdeaNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Request not found.") from error
+    except IdeaAccessError as error:
+        raise HTTPException(
+            status_code=403, detail="Only the idea's owner can answer requests to join."
+        ) from error
+    except JoinRequestError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
 @router.get("/{idea_id}", response_model=IdeaDetailRecord)
 async def read_idea_detail(
     idea_id: uuid.UUID,
@@ -119,7 +212,7 @@ async def decide_approval(
     idea_id: uuid.UUID,
     stage_id: uuid.UUID,
     command: ApprovalDecisionCommand,
-    identity: AuthenticatedIdentity,
+    identity: ContributorIdentity,
     tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,
@@ -148,14 +241,21 @@ async def decide_approval(
 async def save_charter(
     idea_id: uuid.UUID,
     command: ProjectCharterCommand,
-    identity: AuthenticatedIdentity,
+    identity: ContributorIdentity,
     tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,
+    autosave: bool = False,
 ) -> ProjectCharterRecord:
     try:
         return await save_project_charter(
-            tenant.tenant_id, identity.user.id, idea_id, command, settings, session
+            tenant.tenant_id,
+            identity.user.id,
+            idea_id,
+            command,
+            settings,
+            session,
+            autosave=autosave,
         )
     except IdeaNotFoundError as error:
         raise HTTPException(status_code=404, detail="Idea not found.") from error
@@ -171,7 +271,7 @@ async def save_charter(
 async def submit_charter(
     idea_id: uuid.UUID,
     command: ProjectCharterCommand,
-    identity: AuthenticatedIdentity,
+    identity: ContributorIdentity,
     tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,
@@ -199,7 +299,7 @@ async def submit_charter(
 @router.post("", response_model=IdeaRecord, status_code=status.HTTP_201_CREATED)
 async def create_idea(
     command: IdeaUpsertCommand,
-    identity: AuthenticatedIdentity,
+    identity: ContributorIdentity,
     tenant: TenantDependency,
     session: SessionDependency,
 ) -> IdeaRecord:
@@ -213,7 +313,7 @@ async def create_idea(
 async def update_idea(
     idea_id: uuid.UUID,
     command: IdeaUpsertCommand,
-    identity: AuthenticatedIdentity,
+    identity: ContributorIdentity,
     tenant: TenantDependency,
     session: SessionDependency,
 ) -> IdeaRecord:
@@ -229,7 +329,7 @@ async def update_idea(
 async def submit_draft(
     idea_id: uuid.UUID,
     command: IdeaUpsertCommand,
-    identity: AuthenticatedIdentity,
+    identity: ContributorIdentity,
     tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,
@@ -248,7 +348,7 @@ async def submit_draft(
 async def resubmit_corrected_idea(
     idea_id: uuid.UUID,
     command: IdeaUpsertCommand,
-    identity: AuthenticatedIdentity,
+    identity: ContributorIdentity,
     tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,
@@ -266,7 +366,7 @@ async def resubmit_corrected_idea(
 @router.delete("/{idea_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_draft(
     idea_id: uuid.UUID,
-    identity: AuthenticatedIdentity,
+    identity: ContributorIdentity,
     tenant: TenantDependency,
     session: SessionDependency,
 ) -> None:

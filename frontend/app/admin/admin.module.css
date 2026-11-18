@@ -1,6 +1,6 @@
 /* Shared by the People, Tenants and Configuration consoles. Tokens come from AdminShell (.app). */
-.loading { display: grid; min-height: 100svh; place-content: center; justify-items: center; gap: .8rem; background: oklch(98.5% .006 240); color: oklch(45% .03 248); font-size: .875rem; font-weight: 720; }
-.loading::before { width: 2rem; height: .3rem; border-radius: 999px; background: oklch(59.157% .14157 242.451); content: ""; animation: pulse 900ms ease-in-out infinite alternate; }
+.loading { display: grid; min-height: 100svh; place-content: center; justify-items: center; gap: .8rem; background: var(--field); color: var(--muted); font-size: var(--tp-text-sm); font-weight: 720; }
+.loading::before { width: 2rem; height: .3rem; border-radius: 999px; background: var(--blue); content: ""; animation: pulse 900ms ease-in-out infinite alternate; }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
 
 /* Page layout: main card plus a tinted side card. Grid items reset the shared `.card + .card` stacking margin. */
@@ -21,19 +21,19 @@
 .field { display: grid; min-width: 0; gap: .4rem; }
 .field label { font-size: var(--tp-control-label); font-weight: 760; }
 .field input { width: 100%; min-height: 3rem; border: 1px solid var(--line); border-radius: .25rem; padding: .6rem .8rem; outline: none; background: var(--tp-surface); color: var(--ink); font-size: var(--tp-control-value); }
-.field input::placeholder { color: oklch(58% .02 248); }
+.field input::placeholder { color: var(--subtle); }
 .field input:focus { border-color: var(--blue); box-shadow: 0 0 0 3px oklch(59% .14 242 / .16); }
 .field input:disabled { cursor: not-allowed; background: var(--panel); color: var(--muted); }
 .field small { color: var(--muted); font-size: var(--tp-control-hint); line-height: 1.45; }
-.primary { display: inline-flex; min-height: 2.75rem; cursor: pointer; align-items: center; justify-content: center; gap: .5rem; border: 1px solid var(--blue); border-radius: .25rem; padding: .55rem 1rem; background: var(--blue); color: oklch(98.5% .006 240); font-size: var(--tp-text-sm); font-weight: 760; }
+.primary { display: inline-flex; min-height: 2.75rem; cursor: pointer; align-items: center; justify-content: center; gap: .5rem; border: 1px solid var(--blue); border-radius: .25rem; padding: .55rem 1rem; background: var(--blue); color: var(--on-accent); font-size: var(--tp-text-sm); font-weight: 760; }
 .primary:hover:not(:disabled) { border-color: var(--blue-deep); background: var(--blue-deep); }
 .primary:focus-visible, .rowActions button:focus-visible, .tenantToggle:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
 .primary:disabled { cursor: wait; opacity: .6; }
 
 /* Directory tables */
 .tableWrap { overflow-x: auto; }
-.table { width: 100%; min-width: 46rem; border-collapse: collapse; font-size: .9rem; }
-.table th { padding: .7rem 1rem; background: var(--panel); color: var(--muted); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-align: left; text-transform: uppercase; white-space: nowrap; }
+.table { width: 100%; min-width: 46rem; border-collapse: collapse; font-size: var(--tp-text-sm); }
+.table th { padding: .7rem 1rem; background: var(--panel); color: var(--muted); font-size: var(--tp-text-xs); font-weight: 800; text-align: left; white-space: nowrap; }
 .table td { border-top: 1px solid var(--line); padding: .85rem 1rem; vertical-align: middle; }
 .table > tbody > tr:not(.accordionRow):hover > td { background: var(--paper); }
 .person { display: flex; min-width: 0; align-items: center; gap: .7rem; }
@@ -43,6 +43,7 @@
 .stack { display: grid; gap: .1rem; }
 .avatar { display: inline-grid; width: 2.25rem; height: 2.25rem; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--tp-blue-soft); color: var(--blue-deep); font-size: .8125rem; font-weight: 800; letter-spacing: .02em; }
 .access { text-transform: capitalize; }
+.lastSignedIn { display: block; margin-top: .15rem; color: var(--muted); font-size: var(--tp-text-xs); line-height: 1.4; white-space: nowrap; }
 .path { display: inline-flex; border-radius: 999px; padding: .15rem .6rem; background: var(--tp-blue-soft); color: var(--blue-deep); font-size: var(--tp-text-xs); font-weight: 780; white-space: nowrap; }
 .empty { display: grid; justify-items: center; gap: .5rem; padding: 2.75rem 1.25rem; color: var(--muted); font-size: var(--tp-text-sm); text-align: center; }
 .empty svg { color: var(--blue-deep); }
@@ -76,7 +77,7 @@
 .memberRow > p { margin: 0; color: var(--muted); font-size: var(--tp-text-sm); text-transform: capitalize; }
 .memberRow .person strong, .memberRow .person small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .memberLoading { display: grid; gap: .5rem; }
-.memberLoading span { display: block; height: 3.25rem; border-radius: .25rem; background: oklch(91% .014 242); animation: memberPulse 900ms ease-in-out infinite alternate; }
+.memberLoading span { display: block; height: 3.25rem; border-radius: .25rem; background: var(--hover); animation: memberPulse 900ms ease-in-out infinite alternate; }
 .memberLoading span:nth-child(2) { animation-delay: 100ms; }
 .memberLoading span:nth-child(3) { animation-delay: 200ms; }
 .accordionPanel .noResults { border: 1px dashed var(--line); border-radius: .4rem; background: var(--tp-surface); }

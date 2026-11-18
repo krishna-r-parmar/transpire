@@ -21,7 +21,9 @@ from app.domains.tenants.controllers import (
     InvitationNotFoundError,
     MembershipConflictError,
     RoleNotFoundError,
+    RolePermissionError,
     TenantConflictError,
+    change_member_role,
     change_membership_status,
     change_tenant_status,
     invite_member,
@@ -48,6 +50,7 @@ from app.domains.tenants.schemas import (
     InvitationCreateCommand,
     InvitationResult,
     InvitationSummary,
+    MemberRoleCommand,
     MembershipStatusCommand,
     PlatformTenantSummary,
     TenantMemberSummary,
@@ -164,7 +167,9 @@ async def resend_platform_tenant_invitation(
     session: SessionDependency,
 ) -> InvitationResult:
     try:
-        return await resend_invitation(tenant_id, invitation_id, identity, settings, session)
+        return await resend_invitation(
+            tenant_id, invitation_id, identity, settings, session, enforce_role_ladder=False
+        )
     except InvitationNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found."
@@ -222,6 +227,7 @@ async def update_platform_tenant_member_status(
             MembershipStatus(command.status),
             identity,
             session,
+            enforce_role_ladder=False,
         )
     except MembershipConflictError as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
@@ -230,20 +236,43 @@ async def update_platform_tenant_member_status(
 
 @router.get("/admin/members", response_model=list[TenantMemberSummary])
 async def get_tenant_members(
-    _: TenantAdminIdentity,
+    identity: TenantAdminIdentity,
     tenant: TenantDependency,
     session: SessionDependency,
 ) -> list[TenantMemberSummary]:
-    return await list_members(tenant.tenant_id, session)
+    return await list_members(tenant.tenant_id, session, identity)
 
 
 @router.get("/admin/roles", response_model=list[TenantRoleSummary])
 async def get_tenant_roles(
-    _: TenantAdminIdentity,
+    identity: TenantAdminIdentity,
     tenant: TenantDependency,
     session: SessionDependency,
 ) -> list[TenantRoleSummary]:
-    return await list_roles(tenant.tenant_id, session)
+    return await list_roles(tenant.tenant_id, session, identity)
+
+
+@router.patch("/admin/members/{membership_id}/role", response_model=TenantMemberSummary)
+async def update_tenant_member_role(
+    membership_id: uuid.UUID,
+    command: MemberRoleCommand,
+    identity: TenantAdminIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> TenantMemberSummary:
+    try:
+        return await change_member_role(
+            tenant.tenant_id, membership_id, command.role_key, identity, session
+        )
+    except RoleNotFoundError as error:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The selected role is unavailable.",
+        ) from error
+    except RolePermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+    except MembershipConflictError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
 
 
 @router.get("/admin/invitations", response_model=list[InvitationSummary])
@@ -281,6 +310,8 @@ async def create_tenant_invitation(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="The selected role is unavailable.",
         ) from error
+    except RolePermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     except InvitationConflictError as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
 
@@ -303,6 +334,8 @@ async def resend_tenant_invitation(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found."
         ) from error
+    except RolePermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     except (InvitationConflictError, TenantConflictError) as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
 
@@ -310,16 +343,18 @@ async def resend_tenant_invitation(
 @router.delete("/admin/invitations/{invitation_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def revoke_tenant_invitation(
     invitation_id: uuid.UUID,
-    _: TenantAdminIdentity,
+    identity: TenantAdminIdentity,
     tenant: TenantDependency,
     session: SessionDependency,
 ) -> Response:
     try:
-        await revoke_invitation(tenant.tenant_id, invitation_id, session)
+        await revoke_invitation(tenant.tenant_id, invitation_id, session, identity.roles)
     except InvitationNotFoundError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invitation not found."
         ) from error
+    except RolePermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -339,6 +374,8 @@ async def update_tenant_member_status(
             identity,
             session,
         )
+    except RolePermissionError as error:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
     except MembershipConflictError as error:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
     return Response(status_code=status.HTTP_204_NO_CONTENT)

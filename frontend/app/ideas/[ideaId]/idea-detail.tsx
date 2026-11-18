@@ -3,22 +3,23 @@
 import { ArrowLeft, ArrowRight, CalendarClock, ChartColumn, Check, CheckCircle2, Circle, CircleDot, Clock3, FilePenLine, FileText, IndianRupee, ListChecks, LockKeyhole, Pencil, Plus, RefreshCw, RotateCcw, Route, Send, ShieldCheck, Tags, Target, Timer, Trash2, UserPlus, Users, X, XCircle } from "lucide-react";
 import { TenantLink as Link } from "@/components/app/tenant-link";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { DismissibleNotice } from "@/components/ui/dismissible-notice";
-import { IdeaStatusPill, ideaStatusLabel } from "@/components/ui/idea-status";
+import { IdeaStatusPill } from "@/components/ui/idea-status";
 import { SearchableSelectField } from "@/components/ui/searchable-select-field";
 import { SelectField } from "@/components/ui/select-field";
 import { SectionCard, StatusPill, SummaryStrip, type SummaryItem } from "@/components/ui/workspace";
 import { apiRequest } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
+import { IdeaJourney } from "@/components/ui/idea-journey";
 import styles from "./idea-detail.module.css";
 
 type ApprovalStage = { id: string; round_number: number; stage_order: number; stage_key: string; stage_name: string; assignee_name: string; assignee_email: string; sla_hours: number; status: string; decision_comment: string | null; due_at: string | null; actioned_at: string | null; is_actionable: boolean };
 type ActionDraft = { action: string; plan_start: string; plan_end: string; actual_start: string; actual_end: string; owner: string; status: string; phase: number | null };
 type MonthDraft = { month: string; ftm_plan: string; ftm_actual: string; line_of_sight: string; kpi_actual: string; status: string; finance_approved?: boolean };
 type Charter = { id: string; sponsor: string; leader: string; department_id: string | null; site_id: string | null; start_date: string | null; target_completion_date: string | null; team_members: string[]; team_membership_ids: string[]; in_scope: string; out_of_scope: string; objective: string; benefit_type: string; kpi_name: string; budget_approved: string | null; impact_areas: string[]; belt_level: string | null; action_items: ActionDraft[]; monthly_tracking: MonthDraft[]; status: string; updated_at: string; submitted_at: string | null; team_invitations_queued?: number; team_invitations_skipped?: number };
-type Idea = { id: string; reference: string; status: string; idea_type: string; project_category: string | null; project_subtype: string | null; title: string; submitter_name: string; submitter_email: string; submitted_at: string | null; updated_at: string; site_id: string | null; site: string | null; department_id: string | null; department: string | null; category: string | null; subcategory: string | null; process_area: string | null; problem_statement: string; business_case: string; current_state: string; baseline_uom: string; target_state: string; target_uom: string; impacts: string[]; estimated_annual_saving: string | null; cost_avoidance: string | null; investment_required: string | null; estimated_annual_saving_usd: string | null; cost_avoidance_usd: string | null; investment_required_usd: string | null; usd_exchange_rate: string | null; fx_rate_date: string | null; approval_stages: ApprovalStage[]; charter_available: boolean; charter: Charter | null; can_edit_charter: boolean; can_edit_idea: boolean; correction_reason: string | null };
+type Idea = { id: string; reference: string; status: string; idea_type: string; project_category: string | null; project_subtype: string | null; title: string; submitter_name: string; submitter_email: string; submitted_at: string | null; updated_at: string; site_id: string | null; site: string | null; department_id: string | null; department: string | null; category: string | null; subcategory: string | null; process_area: string | null; problem_statement: string; business_case: string; current_state: string; baseline_uom: string; target_state: string; target_uom: string; impacts: string[]; estimated_annual_saving: string | null; cost_avoidance: string | null; investment_required: string | null; estimated_annual_saving_usd: string | null; cost_avoidance_usd: string | null; investment_required_usd: string | null; usd_exchange_rate: string | null; fx_rate_date: string | null; approval_stages: ApprovalStage[]; charter_available: boolean; charter: Charter | null; can_edit_charter: boolean; project_id: string | null; can_edit_idea: boolean; correction_reason: string | null };
 type CatalogItem = { id: string; name: string; site_ids: string[]; applies_to_all_sites: boolean };
 type Catalog = { sites: CatalogItem[]; departments: CatalogItem[] };
 type TeamCandidate = { membership_id: string; display_name: string; email: string };
@@ -52,6 +53,7 @@ export function IdeaDetail({ ideaId }: { ideaId: string }) {
     try {
       const response = await apiRequest(`/ideas/${ideaId}`);
       if (response.status === 401) { router.replace("/sign-in"); return; }
+      if (response.status === 403) { router.replace(`/ideas/${ideaId}/summary`); return; }
       if (!response.ok) { const body = await response.json().catch(() => null) as { detail?: string } | null; throw new Error(body?.detail ?? "The idea could not be loaded."); }
       const next = (await response.json()) as Idea;
       if (next.can_edit_idea) {
@@ -99,9 +101,11 @@ export function IdeaDetail({ ideaId }: { ideaId: string }) {
   if (sessionLoading || !session) return <main className={styles.loading}>Opening idea details</main>;
   if (!idea) return <main className={styles.loading}>{error ? <div className={styles.loadFailure}><XCircle size={24} /><h1>Idea unavailable</h1><p>{error}</p><button type="button" onClick={() => void loadIdea()}><RefreshCw size={15} />Retry</button><Link href="/home">Return home</Link></div> : "Loading the idea and its approval route"}</main>;
 
-  return <AdminShell session={session} active="ideas" eyebrow={`${idea.reference} · ${idea.idea_type === "project" ? "Project" : "Kaizen"}`} title={idea.title} description="Review the submitted case, understand each approval decision, and continue into the project charter when the idea is fully approved." actions={<>{idea.can_edit_idea ? <Link className={styles.editIdea} href={`/ideas/new/v2?resume=${idea.id}`}><Pencil size={15} />{idea.status === "needs_correction" ? "Edit correction" : "Resume draft"}</Link> : null}<IdeaStatusPill status={idea.status} /></>}>
+  return <AdminShell session={session} active="ideas" eyebrow={`${idea.reference} · ${idea.idea_type === "project" ? "Project" : "Kaizen"}`} title={idea.title} actions={<>{idea.can_edit_idea ? <Link className={styles.editIdea} href={`/ideas/new/v2?resume=${idea.id}`}><Pencil size={15} />{idea.status === "needs_correction" ? "Edit correction" : "Resume draft"}</Link> : null}<IdeaStatusPill status={idea.status} /></>}>
     <div className={styles.backRow}><Link href="/home"><ArrowLeft size={16} />Back to Home</Link></div>
     <div className={styles.toastStack}>{notice ? <DismissibleNotice onDismiss={() => setNotice("")}>{notice}</DismissibleNotice> : null}{error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}</div>
+    <NextStep idea={idea} actionable={actionable} onOpen={setSection} />
+    <IdeaJourney stages={idea.approval_stages} submitted={Boolean(idea.submitted_at)} charterAvailable={idea.charter_available} charterSubmitted={idea.status === "charter_submitted"} />
     <SummaryStrip label="Idea summary" items={ideaSummary(idea, actionable)} />
     <nav className={styles.tabs} aria-label="Idea detail sections">
       <button type="button" data-active={section === "overview"} aria-current={section === "overview" ? "true" : undefined} onClick={() => setSection("overview")}><FileText size={16} />Idea details</button>
@@ -133,23 +137,24 @@ export function IdeaDetail({ ideaId }: { ideaId: string }) {
 
 function Overview({ idea }: { idea: Idea }) { return <div className={styles.split}>
   <div>
-    <SectionCard icon={<FileText size={17} />} title="The opportunity and proposed direction" description="These are the statements supplied for evaluation. They remain unchanged while the idea moves through approval."><div className={styles.narrativeGrid}><Detail label="Problem statement" value={idea.problem_statement} /><Detail label="Business case and proposed solution" value={idea.business_case} /><Detail label="Current state or baseline" value={measure(idea.current_state, idea.baseline_uom)} /><Detail label="Target state or KPI" value={measure(idea.target_state, idea.target_uom)} /></div></SectionCard>
-    <SectionCard icon={<IndianRupee size={17} />} title="The value case recorded at submission" description="Financial estimates remain indicative until the project and Finance validation stages are complete."><dl className={styles.facts}><Financial label="Estimated annual saving" inr={idea.estimated_annual_saving} usd={idea.estimated_annual_saving_usd} /><Financial label="Cost avoidance" inr={idea.cost_avoidance} usd={idea.cost_avoidance_usd} /><Financial label="Investment required" inr={idea.investment_required} usd={idea.investment_required_usd} /><div><dt>SQDCP impact</dt><dd>{idea.impacts.length ? idea.impacts.map(capitalize).join(", ") : "Not provided"}</dd></div></dl>{idea.usd_exchange_rate && idea.fx_rate_date ? <p className={styles.fxProvenance}>USD equivalents use the INR to USD rate fixed on {formatDate(idea.fx_rate_date)}.</p> : null}</SectionCard>
+    <SectionCard icon={<FileText size={17} />} title="The opportunity and proposed direction"><div className={styles.narrativeGrid}><Detail label="Problem statement" value={idea.problem_statement} /><Detail label="Business case and proposed solution" value={idea.business_case} /><Detail label="Current state or baseline" value={measure(idea.current_state, idea.baseline_uom)} /><Detail label="Target state or KPI" value={measure(idea.target_state, idea.target_uom)} /></div></SectionCard>
+    <SectionCard icon={<IndianRupee size={17} />} title="The value case recorded at submission" description="Estimates until Finance validates them."><dl className={styles.facts}><Financial label="Estimated annual saving" inr={idea.estimated_annual_saving} usd={idea.estimated_annual_saving_usd} /><Financial label="Cost avoidance" inr={idea.cost_avoidance} usd={idea.cost_avoidance_usd} /><Financial label="Investment required" inr={idea.investment_required} usd={idea.investment_required_usd} /><div><dt>SQDCP impact</dt><dd>{idea.impacts.length ? idea.impacts.map(capitalize).join(", ") : "Not provided"}</dd></div></dl>{idea.usd_exchange_rate && idea.fx_rate_date ? <p className={styles.fxProvenance}>USD equivalents use the INR to USD rate fixed on {formatDate(idea.fx_rate_date)}.</p> : null}</SectionCard>
   </div>
   <div>
-    <SectionCard icon={<Tags size={17} />} title="Where the improvement belongs" description="Classification connects this idea to the organisation’s shared Operational Excellence catalogue." tinted><dl className={styles.metadata}><DetailItem label="Submitted by" value={idea.submitter_name} note={idea.submitter_email} /><DetailItem label="Submitted" value={idea.submitted_at ? formatDate(idea.submitted_at) : null} /><DetailItem label="Site" value={idea.site} /><DetailItem label="Department" value={idea.department} /><DetailItem label="Category" value={idea.category} /><DetailItem label="Subcategory" value={idea.subcategory} /><DetailItem label="Process area" value={idea.process_area} /></dl></SectionCard>
+    <SectionCard icon={<Tags size={17} />} title="Where the improvement belongs" tinted><dl className={styles.metadata}><DetailItem label="Submitted by" value={idea.submitter_name} note={idea.submitter_email} /><DetailItem label="Submitted" value={idea.submitted_at ? formatDate(idea.submitted_at) : null} /><DetailItem label="Site" value={idea.site} /><DetailItem label="Department" value={idea.department} /><DetailItem label="Category" value={idea.category} /><DetailItem label="Subcategory" value={idea.subcategory} /><DetailItem label="Process area" value={idea.process_area} /></dl></SectionCard>
   </div>
 </div>; }
 
 function ApprovalPanel({ idea, actionable, decision, comment, busy, onDecision, onComment, onSubmit }: { idea: Idea; actionable: ApprovalStage | null; decision: string; comment: string; busy: boolean; onDecision: (value: string) => void; onComment: (value: string) => void; onSubmit: () => void }) { return <div className={styles.split}>
   <div>{actionable ? <SectionCard icon={<ShieldCheck size={17} />} title={`Your decision: ${actionable.stage_name}`} description="Review the complete idea above. A correction or rejection requires a clear reason for the submitter." meta={actionable.due_at ? `Due ${formatDate(actionable.due_at)}` : undefined} tinted><div className={styles.decisionPanel}><fieldset className={styles.decisionChoices}><legend className={styles.srOnly}>Decision</legend><button type="button" data-choice="approve" data-selected={decision === "approve"} aria-pressed={decision === "approve"} onClick={() => onDecision("approve")}><CheckCircle2 size={18} /><span><strong>Approve</strong><small>Move to the next stage</small></span></button><button type="button" data-choice="needs_correction" data-selected={decision === "needs_correction"} aria-pressed={decision === "needs_correction"} onClick={() => onDecision("needs_correction")}><RotateCcw size={18} /><span><strong>Needs correction</strong><small>Return with a reason</small></span></button><button type="button" data-choice="reject" data-selected={decision === "reject"} aria-pressed={decision === "reject"} onClick={() => onDecision("reject")}><XCircle size={18} /><span><strong>Reject</strong><small>End this approval journey</small></span></button></fieldset><label>Decision comment {decision === "approve" ? <span>Optional</span> : <span>Required</span>}<textarea value={comment} onChange={(event) => onComment(event.target.value)} rows={4} placeholder={decision === "approve" ? "Record any conditions or guidance for the next stage." : "Explain exactly what should be corrected or why the idea cannot proceed."} /></label><button className={styles.primaryButton} type="button" disabled={!decision || (decision !== "approve" && !comment.trim()) || busy} onClick={onSubmit}>{busy ? "Recording decision" : "Confirm decision"}<Send size={16} /></button></div></SectionCard> : <div className={styles.readOnlyNote}><ShieldCheck size={20} /><div><strong>No decision is assigned to you at this stage.</strong><p>You can still review the route and every recorded comment.</p></div></div>}</div>
-  <div><SectionCard icon={<Route size={17} />} title="Approval route and decision record" description="Stages follow the workflow contract captured when the idea was submitted. A later workflow version cannot silently change this route." tinted>
+  <div><SectionCard icon={<Route size={17} />} title="Approval route and decision record" description="Fixed when the idea was submitted; later workflow changes don't apply." tinted>
     <ol className={styles.timeline}>{idea.approval_stages.map((stage) => <li key={stage.id} data-status={stage.status}><span className={styles.timelineIcon} aria-hidden="true">{stage.status === "approve" ? <Check size={16} /> : stage.status === "reject" ? <XCircle size={16} /> : stage.status === "needs_correction" ? <RotateCcw size={15} /> : stage.status === "pending" ? <Clock3 size={16} /> : <Circle size={14} />}</span><div><span className={styles.stageMeta}>Round {stage.round_number} · Stage {stage.stage_order}</span><h3>{stage.stage_name}</h3><StageStatusPill status={stage.status} /><p>Assigned to {stage.assignee_name}<small>{stage.assignee_email}</small></p><small>{stage.actioned_at ? `Decision recorded ${formatDate(stage.actioned_at)}` : stage.due_at ? `Due ${formatDate(stage.due_at)} · ${stage.sla_hours}-hour service target` : `${stage.sla_hours}-hour service target after activation`}</small>{stage.decision_comment ? <blockquote>{stage.decision_comment}</blockquote> : null}</div></li>)}</ol>
   </SectionCard></div>
 </div>; }
 
 function CharterPanel({ idea, charter, catalog, teamCandidates, departments, busy, onChange, onAddTeam, onRemoveTeam, onToggleImpact, onAddAction, onRemoveAction, onUpdateAction, onUpdateMonth, onSave, onSubmit }: { idea: Idea; charter: CharterDraft; catalog: Catalog; teamCandidates: TeamCandidate[]; departments: CatalogItem[]; busy: string; onChange: (field: keyof Omit<CharterDraft, "impact_areas" | "team_membership_ids" | "action_items" | "monthly_tracking">, value: string) => void; onAddTeam: (membershipId: string) => void; onRemoveTeam: (membershipId: string) => void; onToggleImpact: (value: string) => void; onAddAction: () => void; onRemoveAction: (index: number) => void; onUpdateAction: (index: number, field: keyof ActionDraft, value: string | number | null) => void; onUpdateMonth: (index: number, field: keyof MonthDraft, value: string) => void; onSave: () => void; onSubmit: () => void }) {
   if (!idea.charter_available) return <section className={styles.lockedCharter}><LockKeyhole size={26} /><p>Available after approval</p><h2>The project charter opens when every required approver accepts the idea.</h2><span>Approval preserves the original case. The charter then adds accountable ownership, timing, scope, team, KPI, and approved investment without changing what was submitted.</span><button type="button" disabled>Project charter locked</button></section>;
+  if (idea.project_id && idea.status !== "charter_submitted") return <section className={styles.charterHandoff}><FilePenLine size={22} aria-hidden="true" /><div><h2>The charter now lives with its project</h2><p>{idea.can_edit_charter ? "Complete it in four short steps. Most of it is filled in from this idea, and your draft saves as you go." : "It is being completed by the idea owner. You can read it as it takes shape."}</p></div><Link href={`/projects/${idea.project_id}/charter`}>{idea.can_edit_charter ? "Open charter" : "View charter"}<ArrowRight size={16} aria-hidden="true" /></Link></section>;
   const readOnly = !idea.can_edit_charter;
   const totalPlan = charter.monthly_tracking.reduce((total, entry) => total + Number(entry.ftm_plan || 0), 0);
   const totalActual = charter.monthly_tracking.reduce((total, entry) => total + Number(entry.ftm_actual || 0), 0);
@@ -195,11 +200,43 @@ function toDraft(idea: Idea): CharterDraft {
 }
 const stageStatuses: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger"; Icon: typeof Circle }> = { waiting: { label: "Upcoming", tone: "neutral", Icon: Circle }, pending: { label: "Pending", tone: "info", Icon: Clock3 }, approve: { label: "Approved", tone: "success", Icon: CheckCircle2 }, needs_correction: { label: "Correction requested", tone: "warning", Icon: RotateCcw }, reject: { label: "Rejected", tone: "danger", Icon: XCircle }, cancelled: { label: "Not reached", tone: "neutral", Icon: Circle } };
 function StageStatusPill({ status }: { status: string }) { const entry = stageStatuses[status] ?? { label: status, tone: "neutral" as const, Icon: Circle }; return <StatusPill tone={entry.tone} icon={<entry.Icon size={14} aria-hidden="true" />}>{entry.label}</StatusPill>; }
+/** The single most useful thing to do next on this idea, for whoever is looking at it. */
+function NextStep({ idea, actionable, onOpen }: { idea: Idea; actionable: ApprovalStage | null; onOpen: (section: Section) => void }) {
+  let tone: "action" | "warning" | "info" = "action";
+  let title = ""; let body = ""; let action: ReactNode = null;
+  if (actionable) {
+    title = `Your decision is needed: ${actionable.stage_name}`;
+    body = actionable.due_at ? `Please decide by ${formatDate(actionable.due_at)}.` : "Review the case and record your decision.";
+    action = <button type="button" onClick={() => onOpen("approval")}>Review and decide<ArrowRight size={16} aria-hidden="true" /></button>;
+  } else if (idea.status === "needs_correction" && idea.can_edit_idea) {
+    tone = "warning"; title = "An approver asked for a correction";
+    body = idea.correction_reason || "Update the idea and resubmit it to continue approval.";
+    action = <Link href={`/ideas/new/v2?resume=${idea.id}`}>Edit and resubmit<ArrowRight size={16} aria-hidden="true" /></Link>;
+  } else if (idea.charter_available && idea.status !== "charter_submitted") {
+    const started = idea.status === "charter_in_progress" || Boolean(idea.charter);
+    if (idea.can_edit_charter) {
+      title = "Next step: project charter";
+      body = started ? "Your charter is in progress. Finish and submit it to start delivery." : "This idea is approved. Complete the project charter to start delivery.";
+      action = idea.project_id
+        ? <Link href={`/projects/${idea.project_id}/charter`}>{started ? "Continue charter" : "Start charter"}<ArrowRight size={16} aria-hidden="true" /></Link>
+        : <button type="button" onClick={() => onOpen("project-charter")}>{started ? "Continue charter" : "Start charter"}<ArrowRight size={16} aria-hidden="true" /></button>;
+    } else {
+      tone = "info"; title = "Approved, waiting for the project charter";
+      body = `${idea.submitter_name} will complete the charter to start delivery.`;
+    }
+  }
+  if (!title) return null;
+  return <section className={styles.nextStep} data-tone={tone} aria-label="Next step">
+    <div><strong>{title}</strong><p>{body}</p></div>
+    {action}
+  </section>;
+}
+
 function ideaSummary(idea: Idea, actionable: ApprovalStage | null): SummaryItem[] {
   const current = actionable ?? idea.approval_stages.find((stage) => stage.status === "pending") ?? null;
   const roundStages = current ? idea.approval_stages.filter((stage) => stage.round_number === current.round_number) : [];
   const saving = Number(idea.estimated_annual_saving || 0); const investment = Number(idea.investment_required || 0);
-  const items: SummaryItem[] = [current ? { icon: <CircleDot size={18} />, value: `Stage ${current.stage_order} of ${roundStages.length}`, label: current.stage_name, note: actionable ? "With you" : `With ${current.assignee_name}`, tone: actionable ? "warning" : undefined } : { icon: <CircleDot size={18} />, value: ideaStatusLabel(idea.status), label: "Current status", note: idea.submitted_at ? `Submitted ${formatDate(idea.submitted_at)}` : undefined }];
+  const items: SummaryItem[] = [current ? { icon: <CircleDot size={18} />, value: `Stage ${current.stage_order} of ${roundStages.length}`, label: current.stage_name, note: actionable ? "With you" : `With ${current.assignee_name}`, tone: actionable ? "warning" : undefined } : { icon: <CircleDot size={18} />, value: idea.submitted_at ? formatDate(idea.submitted_at) : "Not submitted", label: "Submitted" }];
   if (idea.estimated_annual_saving) items.push({ icon: <IndianRupee size={18} />, value: compactCurrency(saving), label: "Annual saving", note: idea.cost_avoidance ? `Plus ${currency(idea.cost_avoidance)} cost avoidance` : "Estimated at submission", tone: "success" });
   if (idea.investment_required) items.push(saving > 0 && investment > 0 ? { icon: <Timer size={18} />, value: `${(investment / (saving / 12)).toFixed(1)} mo`, label: "Payback", note: `${currency(idea.investment_required)} investment` } : { icon: <Timer size={18} />, value: compactCurrency(investment), label: "Investment required" });
   if (current?.due_at) items.push({ icon: <CalendarClock size={18} />, value: new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(new Date(current.due_at)), label: "Decision due", note: `${current.sla_hours}-hour service target`, tone: "warning" });

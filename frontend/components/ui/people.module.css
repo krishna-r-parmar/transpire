@@ -1,0 +1,6 @@
+.stack { display: inline-flex; min-width: 0; align-items: center; gap: .5rem; }
+.faces { display: inline-flex; flex: 0 0 auto; }
+.faces > span { display: grid; width: 1.6rem; height: 1.6rem; margin-left: -.4rem; border: 2px solid var(--tp-surface); border-radius: 50%; place-items: center; background: var(--panel); color: var(--ink); font-size: .75rem; font-weight: 700; }
+.faces > span:first-child { margin-left: 0; }
+.faces > span[data-owner="true"] { background: var(--tp-blue-soft); color: var(--blue-deep); }
+.summary { overflow: hidden; color: var(--muted); font-size: var(--tp-text-xs); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }

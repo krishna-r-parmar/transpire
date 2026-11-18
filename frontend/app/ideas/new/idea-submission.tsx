@@ -30,6 +30,7 @@ import { DismissibleNotice } from "@/components/ui/dismissible-notice";
 import { SelectField } from "@/components/ui/select-field";
 import { apiRequest } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
+import { canContribute } from "@/lib/roles";
 import styles from "./submission.module.css";
 
 type Item = {
@@ -162,6 +163,10 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
   const [resumeLoading, setResumeLoading] = useState(Boolean(resumeIdeaId));
   const [correctionReason, setCorrectionReason] = useState("");
   const feedbackRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (session && !canContribute(session.roles)) router.replace("/home");
+  }, [router, session]);
 
   useEffect(() => {
     if (!session) return;
@@ -420,9 +425,9 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
     <AdminShell
       session={session}
       active="submit"
-      eyebrow={draft?.status === "needs_correction" ? "Correction requested" : draft ? "Draft idea" : "Idea submission"}
+      eyebrow={draft?.status === "needs_correction" ? "Correction requested" : draft ? "Draft idea" : undefined}
       title={draft?.status === "needs_correction" ? `Correct ${draft.reference}` : draft ? `Continue ${draft.reference}` : "Submit an idea"}
-      description={draft?.status === "needs_correction" ? "Update the submitted case with the requested clarification. The original approval history remains unchanged." : "Build a clear improvement case with the context, evidence, and expected value reviewers need to act confidently."}
+      description={draft?.status === "needs_correction" ? "Your original approval history stays unchanged." : undefined}
     >
       {draft?.status === "needs_correction" ? <section className={styles.correctionBanner}><RotateCcw size={20} /><div><p>Approver feedback</p><h2>Correction required before approval can continue</h2><span>{correctionReason || "Review the approval timeline for the requested correction, update the idea, and resubmit it."}</span></div><Link href={`/ideas/${draft.id}?section=approval`}>View approval history</Link></section> : null}
       <nav className={styles.stepNavigation} aria-label="Idea submission progress">
@@ -456,7 +461,6 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
             <SectionHeading
               id="step-one-title"
               icon={<Lightbulb size={20} />}
-              eyebrow="Frame the opportunity"
               title="Start with context and classification."
               description="The choices here determine which guidance appears and help the organisation route, compare, and learn from similar ideas."
             />
@@ -464,11 +468,12 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
             <FormSection
               icon={<UserCircle2 size={18} />}
               title="Submission context"
-              description="Your identity and workspace are attached automatically. Select the operational location where the opportunity was observed."
+              description={catalog.sites.length || catalog.departments.length ? "Where did you observe this opportunity?" : "Your name and workspace are attached automatically."}
             >
               <div className={styles.contextGrid}>
                 <ReadOnlyFact label="Submitted by" source="From profile" value={session.user.display_name} meta={session.user.email} />
                 <ReadOnlyFact label="Workspace" source="From workspace" value={session.tenant.name} meta="Current tenant" />
+                {catalog.sites.length || catalog.departments.length ? <>
                 <div className={styles.selectWithHelp}>
                   <SelectField
                     id="site"
@@ -500,6 +505,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
                   />
                   <small>Use the team that owns or experiences the process.</small>
                 </div>
+                </> : null}
               </div>
             </FormSection>
 
@@ -619,7 +625,6 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
             <SectionHeading
               id="step-two-title"
               icon={<FileText size={20} />}
-              eyebrow="Build the case"
               title="Make the opportunity easy to understand."
               description="Write for someone who does not work beside the process every day. Use observable facts, explain the consequence, and define what better looks like."
             />
@@ -671,7 +676,6 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
             <SectionHeading
               id="step-three-title"
               icon={<CircleDollarSign size={20} />}
-              eyebrow="Expected impact"
               title="Connect the idea to measurable value."
               description="Select every affected SQDCP dimension and provide the best available estimates. Early estimates may be directional, but their basis should remain understandable."
             />
@@ -722,7 +726,6 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
             <SectionHeading
               id="step-four-title"
               icon={<Check size={20} />}
-              eyebrow="Review & submit"
               title="Confirm the story and its approval route."
               description="Review this as the first approver will see it. Correct unclear context now; submission fixes the published workflow version to this idea."
             />
@@ -812,8 +815,8 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
   );
 }
 
-function SectionHeading({ id, icon, eyebrow, title, description }: { id: string; icon: ReactNode; eyebrow: string; title: string; description: string }) {
-  return <header className={styles.sectionHeading}><span>{icon}</span><div><p>{eyebrow}</p><h2 id={id}>{title}</h2><small>{description}</small></div></header>;
+function SectionHeading({ id, icon, title, description }: { id: string; icon: ReactNode; title: string; description: string }) {
+  return <header className={styles.sectionHeading}><span>{icon}</span><div><h2 id={id}>{title}</h2><small>{description}</small></div></header>;
 }
 
 function FormSection({ icon, title, description, required = false, children }: { icon: ReactNode; title: string; description: string; required?: boolean; children: ReactNode }) {

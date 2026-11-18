@@ -15,7 +15,7 @@ from app.core.tenant_resolution import (
     resolve_tenant,
 )
 from app.domains.identity.controllers import ClientContext, IssuedSession
-from app.domains.identity.dependencies import SSORecoveryIdentity, TenantAdminIdentity
+from app.domains.identity.dependencies import SSORecoveryIdentity, WorkspaceOwnerIdentity
 from app.domains.identity.schemas import (
     SignInResult,
     SSOActivationResult,
@@ -251,7 +251,7 @@ async def _callback_tenant(request: Request, state_token: str) -> ResolvedTenant
 
 @router.get("/admin/sso", response_model=SSOConfigurationResult)
 async def read_sso_configuration(
-    _: TenantAdminIdentity,
+    _: WorkspaceOwnerIdentity,
     tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,
@@ -262,7 +262,7 @@ async def read_sso_configuration(
 @router.put("/admin/sso", response_model=SSOConfigurationResult)
 async def update_sso_configuration(
     command: SSOConfigurationCommand,
-    identity: TenantAdminIdentity,
+    identity: WorkspaceOwnerIdentity,
     tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,
@@ -275,7 +275,7 @@ async def update_sso_configuration(
 
 @router.get("/admin/sso/validate")
 async def validate_sso_configuration(
-    identity: TenantAdminIdentity,
+    identity: WorkspaceOwnerIdentity,
     tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,
@@ -295,7 +295,7 @@ async def validate_sso_configuration(
 
 @router.post("/admin/sso/activate", response_model=SSOActivationResult)
 async def activate_sso_configuration(
-    identity: TenantAdminIdentity,
+    identity: WorkspaceOwnerIdentity,
     tenant: TenantDependency,
     settings: SettingsDependency,
     session: SessionDependency,

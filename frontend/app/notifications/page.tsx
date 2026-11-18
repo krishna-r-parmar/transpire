@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { NotificationsWorkspace } from "./notifications-workspace";
 
 export const metadata: Metadata = {
-  title: "Approval Notifications | TRANSPIRE",
-  description: "Review ideas awaiting your decision and follow your own approval journeys.",
+  title: "Inbox | TRANSPIRE",
+  description: "Approval decisions and corrections waiting on you, plus your ideas in review.",
 };
 
 export default function NotificationsPage() {

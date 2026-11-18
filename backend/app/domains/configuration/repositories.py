@@ -12,6 +12,7 @@ from app.domains.configuration.models import (
     WorkflowVersion,
 )
 from app.domains.identity.models import InvitationToken, Membership, MembershipStatus, User
+from app.domains.identity.queries import contributing_membership
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +41,7 @@ class SQLAlchemyConfigurationRepository:
                 .join(User, User.id == Membership.user_id)
                 .where(
                     Membership.tenant_id == tenant_id,
+                    contributing_membership(Membership.id, tenant_id),
                     or_(
                         Membership.status == MembershipStatus.ACTIVE,
                         and_(

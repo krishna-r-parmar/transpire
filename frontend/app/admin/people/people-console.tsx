@@ -1,6 +1,6 @@
 "use client";
 
-import { Ban, BellRing, CheckCircle2, CircleDot, Clock, Lock, Mail, MailPlus, RefreshCw, UserCheck, UserX, Users, type LucideIcon } from "lucide-react";
+import { Ban, BellRing, ShieldCheck, CheckCircle2, CircleDot, Clock, Lock, Mail, MailPlus, RefreshCw, UserCheck, UserX, Users, type LucideIcon } from "lucide-react";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { FormEvent, useCallback, useEffect, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
@@ -13,6 +13,7 @@ import { SidePanel } from "@/components/admin/side-panel";
 import register from "@/components/admin/admin-register.module.css";
 import { apiRequest } from "@/lib/api";
 import { useAdminSession } from "@/lib/use-admin-session";
+import { roleName, roleNames } from "@/lib/roles";
 import styles from "../admin.module.css";
 
 type Member = {
@@ -21,9 +22,11 @@ type Member = {
   display_name: string;
   status: string;
   roles: string[];
+  can_manage: boolean;
+  last_signed_in_at: string | null;
 };
 
-type Role = { key: string; name: string };
+type Role = { key: string; name: string; description: string; rank: number; assignable: boolean };
 type Invitation = {
   id: string;
   email: string;
@@ -39,6 +42,18 @@ type ReminderOverview = { cooldown_hours: number; candidates: (ReminderState & {
 type ReminderResult = { queued: string[]; skipped: { membership_id: string; reason: "cooldown" | "not_eligible" }[] };
 
 const reminderDate = new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+const relativeTime = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+function signedInAgo(date: Date) {
+  const minutes = Math.round((date.getTime() - Date.now()) / 60_000);
+  if (Math.abs(minutes) < 1) return "just now";
+  if (Math.abs(minutes) < 60) return relativeTime.format(minutes, "minute");
+  const hours = Math.round(minutes / 60);
+  if (Math.abs(hours) < 24) return relativeTime.format(hours, "hour");
+  const days = Math.round(hours / 24);
+  if (Math.abs(days) < 30) return relativeTime.format(days, "day");
+  return `on ${new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short", year: "numeric" }).format(date)}`;
+}
 
 type DirectoryFilter ="all" | "active" | "invited" | "inactive";
 const filterOf = (state: string): Exclude<DirectoryFilter, "all"> => state === "active" ? "active" : ["invited", "pending", "expired"].includes(state) ? "invited" : "inactive";
@@ -82,6 +97,8 @@ export function PeopleConsole() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [invitations, setInvitations] = useState<Invitation[]>([]);
   const [roleKey, setRoleKey] = useState("idea_submitter");
+  const [roleTarget, setRoleTarget] = useState<Member | null>(null);
+  const [nextRole, setNextRole] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
   const [confirming, setConfirming] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -110,9 +127,10 @@ export function PeopleConsole() {
     }
     if (membersResponse.ok) setMembers((await membersResponse.json()) as Member[]);
     if (rolesResponse.ok) {
-      const availableRoles = (await rolesResponse.json()) as Role[];
+      const availableRoles = ((await rolesResponse.json()) as Role[]).sort((a, b) => a.rank - b.rank);
       setRoles(availableRoles);
-      setRoleKey((current) => availableRoles.some((role) => role.key === current) ? current : availableRoles[0]?.key ?? "");
+      const grantable = availableRoles.filter((role) => role.assignable);
+      setRoleKey((current) => grantable.some((role) => role.key === current) ? current : grantable.find((role) => role.key === "idea_submitter")?.key ?? grantable[0]?.key ?? "");
     }
     if (invitationsResponse.ok) setInvitations((await invitationsResponse.json()) as Invitation[]);
   }, [router]);
@@ -192,6 +210,33 @@ export function PeopleConsole() {
     }
   };
 
+  const openRoleChange = (member: Member) => {
+    setRoleTarget(member);
+    setNextRole(member.roles[0] ?? "");
+  };
+
+  const changeRole = async () => {
+    if (!roleTarget || !nextRole) return;
+    setBusyAction(`role:${roleTarget.id}`); setError(""); setMessage("");
+    try {
+      const response = await apiRequest(`/admin/members/${roleTarget.id}/role`, { method: "PATCH", body: JSON.stringify({ role_key: nextRole }) });
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as { detail?: string } | null;
+        setError(typeof payload?.detail === "string" ? payload.detail : "The role could not be changed.");
+        return;
+      }
+      setMessage(`${roleTarget.display_name} is now a ${roleName(nextRole)}.`);
+      setRoleTarget(null);
+      await loadDirectory();
+    } catch {
+      setError("Role controls are temporarily unavailable.");
+    } finally {
+      setBusyAction("");
+    }
+  };
+
+  const grantableRoles = roles.filter((role) => role.assignable);
+
   const remind = async (member: Member) => {
     setBusyAction(`remind:${member.id}`); setError(""); setMessage("");
     try {
@@ -215,6 +260,13 @@ export function PeopleConsole() {
   };
 
   const cooldownLabel = cooldownHours % 24 === 0 ? `${cooldownHours / 24} day${cooldownHours === 24 ? "" : "s"}` : `${cooldownHours} hour${cooldownHours === 1 ? "" : "s"}`;
+
+  // Helper text under Access, for every member regardless of status.
+  const lastSignedIn = (member: Member) => {
+    if (!member.last_signed_in_at) return <small className={styles.lastSignedIn}>Never signed in</small>;
+    const signedIn = new Date(member.last_signed_in_at);
+    return <small className={styles.lastSignedIn} title={reminderDate.format(signedIn)}>Last signed in {signedInAgo(signedIn)}</small>;
+  };
 
   const reminderButton = (member: Member) => {
     const state = reminders[member.id];
@@ -250,7 +302,6 @@ export function PeopleConsole() {
     <AdminShell
       session={session}
       active="people"
-      eyebrow="Administration"
       title="People"
       description="Everyone with access to this organisation's workspace, and the invitations still open."
       actions={<button type="button" className={styles.primary} onClick={() => setInviteOpen(true)}><MailPlus aria-hidden="true" size={16} />Invite people</button>}
@@ -272,7 +323,7 @@ export function PeopleConsole() {
                 <thead><tr><th>Person</th><th>Access</th><th>Status</th><th>Actions</th></tr></thead>
                 <tbody>{visibleMembers.map((member) => {
                   const invitation = invitations.find((item) => item.email === member.email);
-                  return <tr key={member.id}><td><div className={styles.person}><span className={styles.avatar} aria-hidden="true">{initials(member.display_name, member.email)}</span><span><strong>{member.display_name}</strong><small>{member.email}</small></span></div></td><td className={styles.access}>{member.roles.map((role) => role.replaceAll("_", " ")).join(", ") || "No role assigned"}</td><td><AccountStatus state={invitation?.status ?? member.status} invitation={Boolean(invitation)} /></td><td><div className={register.actions}>{invitation ? <><button type="button" onClick={() => void invitationAction(invitation, "resend")} disabled={Boolean(busyAction)}><RefreshCw aria-hidden="true" size={15} /> Resend</button>{invitation.status !== "revoked" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: "Revoke this invitation?", description: `The invitation for ${invitation.email} will stop working immediately. You can send a new invitation later.`, confirmLabel: "Revoke invitation", busyLabel: "Revoking", run: () => invitationAction(invitation, "revoke") })} disabled={Boolean(busyAction)}><Ban aria-hidden="true" size={15} /> Revoke</button> : null}</> : member.status === "active" ? <>{reminderButton(member)}<button type="button" data-tone="danger" onClick={() => setConfirmation({ title: `Deactivate ${member.display_name}?`, description: "Their active sessions will end immediately and they will be unable to sign in until reactivated.", confirmLabel: "Deactivate member", busyLabel: "Deactivating", run: () => memberAction(member, "inactive") })} disabled={Boolean(busyAction)}><UserX aria-hidden="true" size={15} /> Deactivate</button></> : <button type="button" onClick={() => void memberAction(member, "active")} disabled={Boolean(busyAction)}><UserCheck aria-hidden="true" size={15} /> Reactivate</button>}</div></td></tr>;
+                  return <tr key={member.id}><td><div className={styles.person}><span className={styles.avatar} aria-hidden="true">{initials(member.display_name, member.email)}</span><span><strong>{member.display_name}</strong><small>{member.email}</small></span></div></td><td><span className={styles.access}>{roleNames(member.roles)}</span>{lastSignedIn(member)}</td><td><AccountStatus state={invitation?.status ?? member.status} invitation={Boolean(invitation)} /></td><td><div className={register.actions}>{!member.can_manage ? <span className={styles.muted}>{member.email === session.user.email ? "You" : "Managed by a Workspace Owner"}</span> : invitation ? <><button type="button" onClick={() => void invitationAction(invitation, "resend")} disabled={Boolean(busyAction)}><RefreshCw aria-hidden="true" size={15} /> Resend</button>{invitation.status !== "revoked" ? <button type="button" data-tone="danger" onClick={() => setConfirmation({ title: "Revoke this invitation?", description: `The invitation for ${invitation.email} will stop working immediately. You can send a new invitation later.`, confirmLabel: "Revoke invitation", busyLabel: "Revoking", run: () => invitationAction(invitation, "revoke") })} disabled={Boolean(busyAction)}><Ban aria-hidden="true" size={15} /> Revoke</button> : null}</> : member.status === "active" ? <>{reminderButton(member)}<button type="button" onClick={() => openRoleChange(member)} disabled={Boolean(busyAction)}><ShieldCheck aria-hidden="true" size={15} /> Change role</button><button type="button" data-tone="danger" onClick={() => setConfirmation({ title: `Deactivate ${member.display_name}?`, description: "Their active sessions will end immediately and they will be unable to sign in until reactivated.", confirmLabel: "Deactivate member", busyLabel: "Deactivating", run: () => memberAction(member, "inactive") })} disabled={Boolean(busyAction)}><UserX aria-hidden="true" size={15} /> Deactivate</button></> : <button type="button" onClick={() => void memberAction(member, "active")} disabled={Boolean(busyAction)}><UserCheck aria-hidden="true" size={15} /> Reactivate</button>}</div></td></tr>;
                 })}</tbody>
               </table>
               {visibleMembers.length === 0 ? <p className={styles.noResults}>No people match these filters.</p> : null}
@@ -280,13 +331,19 @@ export function PeopleConsole() {
           ) : <div className={styles.empty}><Users aria-hidden="true" size={24} /><p>No members are visible in this workspace yet.</p></div>}
       </section>
 
-      <SidePanel open={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite people" description={`They will join ${session.tenant.name}. Choose Employee / Idea Submitter for standard access.`}>
+      <SidePanel open={inviteOpen} onClose={() => setInviteOpen(false)} title="Invite people" description={`They will join ${session.tenant.name}. Choose Contributor for standard access.`}>
           <form className={styles.form} onSubmit={invite}>
             <div className={styles.field}><label htmlFor="invite-name">Full name</label><input id="invite-name" name="display_name" required minLength={2} autoComplete="name" /></div>
             <div className={styles.field}><label htmlFor="invite-email">Work email</label><input id="invite-email" name="email" type="email" required autoComplete="email" /></div>
-            <SelectField id="invite-role" name="role_key" label="Access role" value={roleKey} onChange={setRoleKey} disabled={submitting || roles.length === 0} options={roles.map((role) => ({ value: role.key, label: role.key === "idea_submitter" ? "Employee / Idea Submitter" : role.name, description: role.key === "tenant_admin" ? "Manage people and workspace settings" : "Standard access to submit and follow ideas" }))} />
-            <button className={styles.primary} type="submit" disabled={submitting || roles.length === 0}><MailPlus aria-hidden="true" size={16} /> {submitting ? "Sending" : "Send invitation"}</button>
+            <SelectField id="invite-role" name="role_key" label="Access role" value={roleKey} onChange={setRoleKey} disabled={submitting || grantableRoles.length === 0} options={grantableRoles.map((role) => ({ value: role.key, label: role.name, description: role.description }))} />
+            <button className={styles.primary} type="submit" disabled={submitting || grantableRoles.length === 0}><MailPlus aria-hidden="true" size={16} /> {submitting ? "Sending" : "Send invitation"}</button>
           </form>
+      </SidePanel>
+      <SidePanel open={Boolean(roleTarget)} onClose={() => setRoleTarget(null)} title="Change role" description={roleTarget ? `${roleTarget.display_name} is currently a ${roleNames(roleTarget.roles)}. The change takes effect immediately and is recorded in the audit log.` : ""}>
+          <div className={styles.form}>
+            <SelectField id="change-role" name="role_key" label="New role" value={nextRole} onChange={setNextRole} disabled={Boolean(busyAction)} options={grantableRoles.map((role) => ({ value: role.key, label: role.name, description: role.description }))} />
+            <button className={styles.primary} type="button" onClick={() => void changeRole()} disabled={Boolean(busyAction) || !roleTarget || roleTarget.roles.includes(nextRole)}><ShieldCheck aria-hidden="true" size={16} /> {busyAction.startsWith("role:") ? "Saving" : "Save role"}</button>
+          </div>
       </SidePanel>
       <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title ?? "Confirm action"} description={confirmation?.description ?? ""} confirmLabel={confirmation?.confirmLabel ?? "Confirm"} busyLabel={confirmation?.busyLabel} busy={confirming} onClose={() => setConfirmation(null)} onConfirm={confirmAction} />
     </AdminShell>

@@ -71,6 +71,13 @@ class MembershipStatusCommand(BaseModel):
 class TenantRoleSummary(BaseModel):
     key: str
     name: str
+    description: str
+    rank: int
+    assignable: bool
+
+
+class MemberRoleCommand(BaseModel):
+    role_key: str = Field(min_length=2, max_length=80, pattern=r"^[a-z0-9_]+$")
 
 
 class TenantMemberSummary(BaseModel):
@@ -79,6 +86,8 @@ class TenantMemberSummary(BaseModel):
     display_name: str
     status: str
     roles: list[str]
+    can_manage: bool = False
+    last_signed_in_at: datetime | None = None
 
 
 class CheckInReminderCandidate(BaseModel):

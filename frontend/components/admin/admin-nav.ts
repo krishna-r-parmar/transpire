@@ -1,9 +1,11 @@
 import { Building2, Eye, FileClock, GitBranch, KeyRound, Layers3, MapPin, Network, Users, Workflow, type LucideIcon } from "lucide-react";
 import type { SessionIdentity } from "@/lib/api";
+import { isWorkspaceAdmin, isWorkspaceOwner } from "@/lib/roles";
 
 export type AdminRoute = "sites" | "departments" | "categories" | "process_areas" | "workflow" | "idea_bank_policy" | "people" | "sign_in" | "audit_log" | "tenants";
 
-export type AdminPage = { route: AdminRoute; href: string; label: string; Icon: LucideIcon };
+/** `ownerOnly` pages are limited to Workspace Owners (sign-in and security). */
+export type AdminPage = { route: AdminRoute; href: string; label: string; Icon: LucideIcon; ownerOnly?: boolean };
 export type AdminGroup = { label: string; pages: AdminPage[]; platform?: boolean };
 
 /** The administration information architecture: one page per register or policy. */
@@ -22,7 +24,7 @@ export const adminGroups: AdminGroup[] = [
   ] },
   { label: "Access", pages: [
     { route: "people", href: "/admin/people", label: "People", Icon: Users },
-    { route: "sign_in", href: "/admin/sign-in", label: "Microsoft sign-in", Icon: KeyRound },
+    { route: "sign_in", href: "/admin/sign-in", label: "Microsoft sign-in", Icon: KeyRound, ownerOnly: true },
     { route: "audit_log", href: "/admin/audit-log", label: "Audit log", Icon: FileClock },
   ] },
   { label: "Platform", platform: true, pages: [
@@ -33,8 +35,12 @@ export const adminGroups: AdminGroup[] = [
 export const isAdminRoute = (route: string): route is AdminRoute => adminGroups.some((group) => group.pages.some((page) => page.route === route));
 
 export function visibleAdminGroups(session: SessionIdentity) {
-  const tenantAdmin = session.roles.includes("tenant_admin");
-  return adminGroups.filter((group) => group.platform ? session.user.is_platform_admin : tenantAdmin);
+  const tenantAdmin = isWorkspaceAdmin(session.roles);
+  const owner = isWorkspaceOwner(session.roles);
+  return adminGroups
+    .filter((group) => group.platform ? session.user.is_platform_admin : tenantAdmin)
+    .map((group) => ({ ...group, pages: group.pages.filter((page) => !page.ownerOnly || owner) }))
+    .filter((group) => group.pages.length > 0);
 }
 
 /** First admin page this person can open; null when they have no administration access. */

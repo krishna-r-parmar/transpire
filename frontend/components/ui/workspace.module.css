@@ -15,7 +15,10 @@
 
 .summary { display: grid; gap: 1px; margin-bottom: 1.75rem; overflow: hidden; border: 1px solid var(--line); border-radius: .4rem; background: var(--line); grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
 .summaryItem { display: flex; min-height: 5.5rem; align-items: center; gap: .85rem; padding: 1rem 1.25rem; background: var(--tp-surface); color: inherit; text-decoration: none; }
-a.summaryItem:hover, a.summaryItem:focus-visible { background: var(--panel); }
+button.summaryItem { width: 100%; border: 0; border-radius: 0; font: inherit; text-align: left; cursor: pointer; }
+a.summaryItem:hover, a.summaryItem:focus-visible, button.summaryItem:hover, button.summaryItem:focus-visible { background: var(--panel); }
+button.summaryItem[aria-pressed="true"] { background: var(--tp-blue-soft); box-shadow: inset 0 -3px 0 var(--blue); }
+.card[id] { scroll-margin-top: 1.5rem; }
 .summaryIcon { display: grid; width: 2.5rem; height: 2.5rem; flex: 0 0 auto; place-items: center; border-radius: 50%; background: var(--tp-blue-soft); color: var(--blue-deep); }
 .summaryItem[data-tone="warning"] .summaryIcon { background: var(--tp-warning-soft); color: var(--tp-warning); }
 .summaryItem[data-tone="success"] .summaryIcon { background: var(--tp-success-soft); color: var(--tp-success); }
@@ -34,4 +37,34 @@ a.summaryItem:hover, a.summaryItem:focus-visible { background: var(--panel); }
   .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summaryItem { flex-direction: column; align-items: flex-start; gap: .5rem; padding: .9rem; }
   .cardHead, .cardBody { padding-inline: 1rem; }
+}
+
+/*
+ * Workspace look (Home, Idea Bank, ideas, Inbox, projects, profile). Administration keeps the denser console above.
+ * Sections are separated by space, not boxes; only tables and lists keep a surface. Tiles are soft panels.
+ */
+:global([data-area="workspace"]) .card { border: 0; border-radius: 0; background: transparent; }
+:global([data-area="workspace"]) .card + .card { margin-top: 2.5rem; }
+:global([data-area="workspace"]) .cardHead { border-bottom: 0; padding: 0 0 .9rem; gap: .65rem; }
+:global([data-area="workspace"]) .cardIcon { width: 1.75rem; height: 1.75rem; border-radius: 50%; background: transparent; color: var(--blue); }
+:global([data-area="workspace"]) .cardTitle h2 { font-size: 1.25rem; letter-spacing: -.02em; }
+:global([data-area="workspace"]) .cardBody { padding: 0; }
+:global([data-area="workspace"]) .card:has(> .cardBody[data-flush="true"]) > .cardBody { overflow: hidden; border: 1px solid var(--line); border-radius: var(--radius-overlay); background: var(--tp-surface); }
+:global([data-area="workspace"]) .card[data-tone="tinted"] > .cardBody { border-radius: var(--radius-overlay); padding: 1.25rem; background: var(--panel); }
+
+:global([data-area="workspace"]) .summary { gap: .75rem; margin-bottom: 2.5rem; overflow: visible; border: 0; border-radius: 0; background: transparent; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+:global([data-area="workspace"]) .summaryItem { min-height: 0; align-items: flex-start; flex-direction: column; gap: .6rem; border-radius: var(--radius-overlay); padding: 1rem 1.1rem; background: var(--panel); transition: background 150ms ease-out, box-shadow 150ms ease-out; }
+:global([data-area="workspace"]) a.summaryItem:hover, :global([data-area="workspace"]) button.summaryItem:hover { background: var(--hover); }
+:global([data-area="workspace"]) button.summaryItem[aria-pressed="true"] { background: var(--tp-blue-soft); box-shadow: inset 0 0 0 2px var(--blue); }
+:global([data-area="workspace"]) .summaryIcon { width: 2rem; height: 2rem; background: var(--tp-surface); }
+:global([data-area="workspace"]) .summaryItem strong { font-size: 1.75rem; }
+
+:global([data-area="workspace"]) .status { min-height: 1.75rem; border-color: transparent; padding: .2rem .7rem; font-weight: 700; }
+
+@media (max-width: 40rem) {
+  :global([data-area="workspace"]) .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; margin-bottom: 1.75rem; }
+  :global([data-area="workspace"]) .summaryItem { gap: .35rem; padding: .8rem .9rem; }
+  :global([data-area="workspace"]) .summaryIcon { display: none; }
+  :global([data-area="workspace"]) .summaryItem strong { font-size: 1.4rem; }
+  :global([data-area="workspace"]) .summaryNote { display: none; }
 }

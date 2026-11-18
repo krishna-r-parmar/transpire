@@ -25,7 +25,7 @@ Configure `DEV_ADMIN_PASSWORD` in the ignored repository-root `.env`, then run f
 .venv/bin/uvicorn app.main:app --reload
 ```
 
-The seed is development-only and idempotent. It creates the `DEV_TENANT_SLUG` workspace and a Tenant Admin using `DEV_ADMIN_EMAIL`. Open `http://localhost:3000/sign-in`; a single active membership is selected automatically. Keep `SESSION_COOKIE_SECURE=false` locally and set it to `true` behind HTTPS in production.
+The seed is development-only and idempotent. It creates the `DEV_TENANT_SLUG` workspace and a Workspace Owner using `DEV_ADMIN_EMAIL`. Open `http://localhost:3000/sign-in`; a single active membership is selected automatically. Keep `SESSION_COOKIE_SECURE=false` locally and set it to `true` behind HTTPS in production.
 
 In the route inventory below, insert `/t/{tenant_shortname}` after `/api/v1` for every tenant-scoped route. Central sign-in, workspace selection, password-reset requests, and invitation inspection/acceptance remain global because they establish or recover tenant context securely.
 
@@ -56,13 +56,14 @@ Administration routes:
 - `PATCH /api/v1/platform/tenants/{tenant_id}/members/{membership_id}/status` — platform administrator member lifecycle control
 - `GET /api/v1/admin/members` — tenant administrators only
 - `GET /api/v1/admin/roles` — tenant administrators only
-- `GET|PUT /api/v1/admin/sso` — inspect readiness or configure the Entra directory
+- `GET|PUT /api/v1/admin/sso` — inspect readiness or configure the Entra directory (Workspace Owners only, like every `/admin/sso` route)
 - `GET /api/v1/admin/sso/validate` — validate configuration with the current tenant administrator
 - `POST /api/v1/admin/sso/activate` — atomically require SSO and queue active-user notices
 - `POST /api/v1/platform/tenants/{tenant_id}/sso/recovery` — issue restricted recovery
 - `GET|POST /api/v1/admin/invitations` — list or create invitations
 - `POST|DELETE /api/v1/admin/invitations/{invitation_id}` — resend or revoke an invitation
 - `PATCH /api/v1/admin/members/{membership_id}/status` — activate or deactivate a member
+- `PATCH /api/v1/admin/members/{membership_id}/role` — change a member's workspace role (Viewer, Contributor, Workspace Admin, Workspace Owner). Admins manage only Viewers and Contributors; Owners manage everyone; nobody changes their own role; a workspace always keeps one active Owner
 - `GET|POST /api/v1/admin/configuration/master-data/{kind}` — list or create sites, departments, categories, subcategories, and process areas
 - `PATCH /api/v1/admin/configuration/master-data/{kind}/{item_id}` — update configuration lifecycle state
 - `GET /api/v1/admin/configuration/workflows/contracts` — inspect versioned approval contracts

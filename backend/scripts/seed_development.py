@@ -1,6 +1,6 @@
 import asyncio
 
-from sqlalchemy import insert, select
+from sqlalchemy import delete, insert, select
 
 from app.core.config import get_settings
 from app.core.database import session_factory
@@ -12,6 +12,7 @@ from app.domains.configuration.controllers import (
 from app.domains.configuration.models import ConfigurationItem, WorkflowDefinition
 from app.domains.ideas.models import IdeaBankPolicy
 from app.domains.ideas.services import create_default_idea_bank_policy
+from app.domains.identity.access import WORKSPACE_OWNER, WORKSPACE_ROLES
 from app.domains.identity.models import (
     Membership,
     MembershipStatus,
@@ -113,40 +114,29 @@ async def seed() -> None:
             membership.failed_sign_in_attempts = 0
             membership.locked_until = None
 
-        role = await session.scalar(
-            select(Role).where(Role.tenant_id == tenant.id, Role.key == "tenant_admin")
-        )
-        if role is None:
-            role = Role(
-                tenant_id=tenant.id,
-                key="tenant_admin",
-                name="Tenant Administrator",
-                permissions=[
-                    "idea.create",
-                    "idea.view",
-                    "tenant.people.manage",
-                    "tenant.settings.manage",
-                ],
-                is_system=True,
+        role = None
+        for definition in WORKSPACE_ROLES:
+            stored = await session.scalar(
+                select(Role).where(Role.tenant_id == tenant.id, Role.key == definition.key)
             )
-            session.add(role)
-            await session.flush()
+            if stored is None:
+                stored = Role(tenant_id=tenant.id, key=definition.key, is_system=True)
+                session.add(stored)
+            stored.name = definition.name
+            stored.permissions = list(definition.permissions)
+            if definition.key == WORKSPACE_OWNER:
+                role = stored
+        await session.flush()
+        assert role is not None
 
-        assignment_exists = await session.scalar(
-            select(membership_roles.c.membership_id).where(
-                membership_roles.c.membership_id == membership.id,
-                membership_roles.c.role_id == role.id,
-            )
+        await session.execute(
+            delete(membership_roles).where(membership_roles.c.membership_id == membership.id)
         )
-        if assignment_exists is None:
-            await session.execute(
-                insert(membership_roles).values(
-                    membership_id=membership.id,
-                    role_id=role.id,
-                )
-            )
+        await session.execute(
+            insert(membership_roles).values(membership_id=membership.id, role_id=role.id)
+        )
 
-    print("Development tenant and administrator are ready.")
+    print("Development tenant and Workspace Owner are ready.")
     print(f"Workspace URL: {settings.public_app_url.rstrip('/')}/t/{tenant.slug}/sign-in")
     print(f"Administrator email: {settings.development_admin_email}")
 

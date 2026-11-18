@@ -1,26 +1,26 @@
-.loading { display: grid; min-height: 100svh; place-content: center; background: oklch(98.5% .006 240); color: oklch(45% .03 248); font-size: .875rem; font-weight: 750; }
+.loading { display: grid; min-height: 100svh; place-content: center; background: var(--field); color: var(--muted); font-size: var(--tp-text-sm); font-weight: 750; }
 .tableWrap { overflow-x: auto; }
-.tableWrap table { width: 100%; border-collapse: collapse; font-size: .9rem; }
-.tableWrap th { padding: .7rem 1rem; background: var(--panel); color: var(--muted); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-align: left; text-transform: uppercase; white-space: nowrap; }
-.tableWrap td { border-top: 1px solid var(--line); padding: .9rem 1rem; color: var(--ink); vertical-align: middle; }
-.tableWrap tbody tr:hover td { background: var(--paper); }
+.tableWrap table { width: 100%; border-collapse: collapse; font-size: var(--tp-text-sm); }
+.tableWrap th { padding: .7rem 1rem; border-bottom: 1px solid var(--line); color: var(--muted); font-size: var(--tp-text-xs); font-weight: 650; text-align: left; white-space: nowrap; }
+.tableWrap td { border-top: 1px solid var(--line); padding: 1rem; color: var(--ink); vertical-align: middle; }
+.tableWrap tbody tr:first-child td { border-top: 0; }
+.tableWrap tbody tr:hover td { background: var(--panel); }
 .tableWrap td > strong, .tableWrap td > span:not([data-tone]), .tableWrap td > small { display: block; }
-.tableWrap td > strong { max-width: 34rem; font-size: var(--tp-text-md); font-weight: 780; line-height: 1.35; }
+.tableWrap td > strong { max-width: 34rem; font-size: var(--tp-text-md); font-weight: 650; line-height: 1.35; }
 .tableWrap small, .tableWrap time { margin-top: .15rem; color: var(--muted); font-size: var(--tp-text-xs); }
 .tableWrap td:nth-child(2) small { max-width: 32ch; }
-.reference { margin-bottom: .15rem; color: var(--blue-deep); font-size: var(--tp-text-xs); font-weight: 800; letter-spacing: .03em; }
-.ideaLink { display: block; max-width: 34rem; color: var(--ink); font-size: var(--tp-text-md); font-weight: 780; line-height: 1.35; text-decoration: none; }
+.reference { margin-bottom: .2rem; color: var(--muted); font-size: var(--tp-text-xs); font-weight: 600; }
+.ideaLink { display: block; max-width: 34rem; color: var(--ink); font-size: var(--tp-text-md); font-weight: 650; line-height: 1.35; text-decoration: none; }
 .ideaLink:hover { color: var(--blue-deep); text-decoration: underline; }
-.review, .rowLink { display: inline-flex; min-height: 2.5rem; align-items: center; justify-content: center; gap: .35rem; border-radius: .25rem; padding: .45rem .85rem; font-size: var(--tp-text-sm); font-weight: 760; text-decoration: none; white-space: nowrap; }
-.review { background: var(--blue); color: oklch(98% .006 240); }
+.review, .rowLink { display: inline-flex; min-height: 2.75rem; align-items: center; justify-content: center; gap: .35rem; border-radius: .25rem; padding: .45rem .85rem; font-size: var(--tp-text-sm); font-weight: 760; text-decoration: none; white-space: nowrap; }
+.review { background: var(--blue); color: var(--on-accent); }
 .review:hover { background: var(--blue-deep); }
-.rowLink { border: 1px solid var(--tp-line-strong); background: var(--tp-surface); color: var(--blue-deep); }
+.rowLink { border: 1px solid var(--tp-line-strong); background: transparent; color: var(--blue-deep); }
 .rowLink:hover { background: var(--tp-blue-soft); }
 .tableWrap td:last-child { text-align: right; }
-.empty { display: grid; min-height: 12rem; place-content: center; justify-items: center; padding: 2rem 1.25rem; text-align: center; }
-.empty > span { display: grid; width: 3rem; height: 3rem; place-items: center; border-radius: 50%; background: var(--tp-blue-soft); color: var(--blue-deep); }
-.empty h3 { margin: .8rem 0 .3rem; font-size: var(--tp-text-lg); }
-.empty p { max-width: 52ch; margin: 0; color: var(--muted); font-size: var(--tp-text-sm); line-height: 1.5; }
+.empty { display: flex; align-items: center; gap: .75rem; padding: 1rem 1.25rem; }
+.empty > span { display: grid; flex: 0 0 auto; width: 2.25rem; height: 2.25rem; place-items: center; border-radius: 50%; background: var(--tp-blue-soft); color: var(--blue-deep); }
+.empty p { margin: 0; color: var(--muted); font-size: var(--tp-text-sm); font-weight: 600; }
 .srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
 @media (max-width: 44rem) {
   .tableWrap thead { display: none; }
@@ -29,7 +29,20 @@
   .tableWrap tr:first-child { border-top: 0; }
   .tableWrap tbody tr:hover td { background: transparent; }
   .tableWrap td { border: 0; padding: .3rem 0; }
-  .tableWrap td[data-label]:not(:first-child)::before { display: block; margin-bottom: .15rem; color: var(--muted); content: attr(data-label); font-size: .75rem; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .tableWrap td[data-label]:not(:first-child)::before { display: block; margin-bottom: .15rem; color: var(--muted); content: attr(data-label); font-size: var(--tp-text-xs); font-weight: 800; }
   .tableWrap td:last-child { padding-top: .6rem; text-align: left; }
   .review, .rowLink { width: 100%; min-height: 2.75rem; }
 }
+
+/* Requests to join your ideas */
+.joinList { margin: 0; padding: 0; list-style: none; }
+.joinList li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.5rem; padding: 1rem; }
+.joinList li + li { border-top: 1px solid var(--line); }
+.joinList li > div:first-child { min-width: 0; flex: 1 1 22rem; font-size: var(--tp-text-md); line-height: 1.45; }
+.joinList .ideaLink { display: inline; }
+.joinList small { display: block; margin-top: .2rem; color: var(--muted); font-size: var(--tp-text-xs); }
+.joinList p { margin: .4rem 0 0; color: var(--ink); font-size: var(--tp-text-sm); }
+.joinActions { display: flex; flex-wrap: wrap; gap: .5rem; }
+.joinActions button { cursor: pointer; border: 0; font: inherit; font-size: var(--tp-text-sm); }
+.joinActions .rowLink { border: 1px solid var(--tp-line-strong); }
+.joinActions button:disabled { cursor: progress; opacity: .7; }

@@ -1,11 +1,72 @@
+/*
+ * Design tokens. Every authenticated screen reads these; public marketing pages keep their own scoped palette.
+ * Dark values live under html[data-theme="dark"], which the root layout sets from the saved choice or the OS setting.
+ */
 :root {
+  color-scheme: light;
   --brand-red: oklch(62.236% 0.22144 23.472);
   --brand-blue: oklch(59.157% 0.14157 242.451);
-  --ink: oklch(25% 0.052 253);
-  --surface: oklch(98.5% 0.006 240);
   --focus: oklch(62.236% 0.22144 23.472);
   --font-sans: Aptos, "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Neutrals */
+  --ink: oklch(22% .047 253);
+  --muted: oklch(45% .025 248);
+  --subtle: oklch(58% .025 248);
+  --paper: oklch(98.2% .006 240);
+  --tp-surface: oklch(100% 0 0);
+  --field: oklch(98.5% .006 240);
+  --panel: oklch(95.5% .012 242);
+  --hover: oklch(94.5% .02 242);
+  --line: oklch(88% .018 242);
+  --tp-line-strong: oklch(75% .055 242);
+  --surface: var(--paper);
+
+  /* Brand and roles */
+  --blue: oklch(59.157% .14157 242.451);
+  --blue-deep: oklch(45% .12 242);
+  --tp-blue-soft: oklch(94% .025 242);
+  --blue-active: oklch(92% .04 242);
+  --navy: oklch(19% .058 254);
+  --red: oklch(62.236% .22144 23.472);
+  --on-accent: oklch(100% 0 0);
+  --tp-success: oklch(42% .1 150); --tp-success-soft: oklch(94% .04 150); --tp-success-line: oklch(76% .08 150);
+  --tp-warning: oklch(43% .1 75); --tp-warning-soft: oklch(96% .045 80); --tp-warning-line: oklch(78% .09 80);
+  --tp-danger: oklch(44% .14 23); --tp-danger-soft: oklch(95% .035 23); --tp-danger-line: oklch(79% .075 23);
+  --shadow-color: oklch(25% .05 254 / .12);
+
+  /* Type scale: 13 / 14 / 16 / 18px. Nothing in the app goes below 13px. */
+  --tp-text-xs: .8125rem; --tp-text-sm: .875rem; --tp-text-md: 1rem; --tp-text-lg: 1.125rem;
+  --tp-control-label: .875rem; --tp-control-value: .9375rem; --tp-control-hint: .8125rem; --tp-control-chip: .8125rem;
+
+  /* Shape and spacing (DESIGN.md) */
+  --radius-control: 4px; --radius-panel: 6px; --radius-overlay: 10px; --radius-pill: 999px;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: oklch(94% .01 240);
+  --muted: oklch(76% .02 245);
+  --subtle: oklch(64% .02 245);
+  --paper: oklch(17% .028 255);
+  --tp-surface: oklch(21% .032 255);
+  --field: oklch(19% .03 255);
+  --panel: oklch(24.5% .034 255);
+  --hover: oklch(27% .04 252);
+  --line: oklch(32% .034 252);
+  --tp-line-strong: oklch(44% .05 248);
+
+  --blue: oklch(68% .13 242);
+  --blue-deep: oklch(82% .09 242);
+  --tp-blue-soft: oklch(29% .06 248);
+  --blue-active: oklch(33% .08 248);
+  --navy: oklch(13% .03 254);
+  --on-accent: oklch(15% .03 254);
+  --tp-success: oklch(80% .13 150); --tp-success-soft: oklch(27% .05 150); --tp-success-line: oklch(46% .08 150);
+  --tp-warning: oklch(84% .12 82); --tp-warning-soft: oklch(29% .05 80); --tp-warning-line: oklch(50% .08 80);
+  --tp-danger: oklch(78% .13 23); --tp-danger-soft: oklch(28% .06 23); --tp-danger-line: oklch(48% .1 23);
+  --shadow-color: oklch(5% .02 254 / .5);
 }
 
 * {

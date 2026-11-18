@@ -10,7 +10,6 @@ def create_default_idea_bank_policy(session: AsyncSession, tenant_id: uuid.UUID)
         IdeaBankPolicy(
             tenant_id=tenant_id,
             detail_level="operational",
-            show_contributor=True,
             show_financials=False,
         )
     )

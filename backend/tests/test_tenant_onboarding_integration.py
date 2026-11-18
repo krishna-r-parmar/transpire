@@ -125,7 +125,7 @@ async def test_platform_provisioning_invitation_and_tenant_admin_journey() -> No
             json={"email": administrator_email, "password": administrator_password},
         )
         assert tenant_sign_in.status_code == 200, tenant_sign_in.text
-        assert "tenant_admin" in tenant_sign_in.json()["session"]["roles"]
+        assert tenant_sign_in.json()["session"]["roles"] == ["workspace_owner"]
         assert tenant_sign_in.json()["session"]["user"]["is_platform_admin"] is False
 
         platform_boundary = await tenant_client.get(f"{platform_prefix}/platform/tenants")
@@ -317,7 +317,6 @@ async def test_platform_provisioning_invitation_and_tenant_admin_journey() -> No
             f"{tenant_prefix}/admin/configuration/idea-bank-policy",
             json={
                 "detail_level": "full",
-                "show_contributor": False,
                 "show_financials": True,
             },
             headers={"X-CSRF-Token": tenant_csrf},
@@ -326,7 +325,8 @@ async def test_platform_provisioning_invitation_and_tenant_admin_journey() -> No
         full_idea_bank = await tenant_client.get(f"{tenant_prefix}/ideas")
         assert full_idea_bank.status_code == 200
         assert full_idea_bank.json()[0]["problem_statement"] == idea_command["problem_statement"]
-        assert full_idea_bank.json()[0]["contributor"] is None
+        # Owner names are always shown so colleagues can find and join improvements.
+        assert full_idea_bank.json()[0]["contributor"] is not None
         assert full_idea_bank.json()[0]["estimated_annual_saving"] == "250000.00"
 
         submitted_detail = await tenant_client.get(
@@ -423,7 +423,12 @@ async def test_platform_provisioning_invitation_and_tenant_admin_journey() -> No
             headers={"X-CSRF-Token": tenant_csrf},
         )
         assert roles.status_code == 200
-        assert {role["key"] for role in roles.json()} == {"tenant_admin", "idea_submitter"}
+        assert {role["key"] for role in roles.json()} == {
+            "viewer",
+            "idea_submitter",
+            "tenant_admin",
+            "workspace_owner",
+        }
         assert members.status_code == 200
         assert members.json()[0]["email"] == administrator_email
         assert invited.status_code == 202, invited.text

@@ -4,6 +4,7 @@ from fastapi import APIRouter, Query
 
 from app.domains.audit.controllers import list_audit_events
 from app.domains.audit.schemas import AuditEventPage
+from app.domains.identity.access import is_workspace_admin
 from app.domains.identity.dependencies import (
     AuthenticatedIdentity,
     SessionDependency,
@@ -25,7 +26,7 @@ async def get_audit_events(
     return await list_audit_events(
         tenant.tenant_id,
         identity.user.id,
-        "tenant_admin" in identity.roles,
+        is_workspace_admin(identity.roles),
         session,
         page=page,
         page_size=page_size,

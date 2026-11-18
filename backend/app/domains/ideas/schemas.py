@@ -77,6 +77,7 @@ class IdeaBankEntry(BaseModel):
     category: str | None
     submitted_at: datetime | None
     contributor: str | None = None
+    team: list[str] = Field(default_factory=list)
     subcategory: str | None = None
     process_area: str | None = None
     impacts: list[str] | None = None
@@ -96,6 +97,57 @@ class IdeaBankEntry(BaseModel):
     fx_rate_date: date | None = None
 
 
+# What the viewer can do about joining this idea's team:
+# owner / member: already on it; pending: asked and waiting; available: may ask now;
+# closed: not approved yet (or finished); not_allowed: Viewers cannot join teams.
+JoinState = Literal["owner", "member", "pending", "available", "closed", "not_allowed"]
+
+
+class JoinRequestCommand(BaseModel):
+    message: str = Field(default="", max_length=500)
+
+
+class JoinRequestRecord(BaseModel):
+    id: uuid.UUID
+    idea_id: uuid.UUID
+    idea_reference: str
+    idea_title: str
+    requester_name: str
+    requester_email: str
+    message: str
+    status: str
+    created_at: datetime
+
+
+class IdeaJourneyStage(BaseModel):
+    stage_name: str
+    status: str
+    round_number: int
+    stage_order: int
+
+
+class IdeaSummaryRecord(IdeaBankEntry):
+    """Read-only view of one idea for anyone who can see it in the Idea Bank.
+
+    Fields hidden by the Idea Bank visibility policy are null; the ``shows_*`` flags tell the
+    page whether a null means "hidden by policy" or "not provided". Owners, approvers, and
+    Workspace Admins see every field.
+    """
+
+    site: str | None = None
+    department: str | None = None
+    approval_journey: list[IdeaJourneyStage] = Field(default_factory=list)
+    charter_available: bool = False
+    charter_submitted: bool = False
+    can_manage: bool = False
+    join_state: JoinState = "closed"
+    join_requests: list["JoinRequestRecord"] = Field(default_factory=list)
+    shows_operational: bool = False
+    shows_narrative: bool = False
+    shows_contributor: bool = False
+    shows_financials: bool = False
+
+
 class ExchangeRateRecord(BaseModel):
     base_currency: Literal["INR"] = "INR"
     quote_currency: Literal["USD"] = "USD"
@@ -105,8 +157,8 @@ class ExchangeRateRecord(BaseModel):
 
 
 class IdeaBankPolicyCommand(BaseModel):
+    # Owner and team names are always shown; the policy only limits detail and financials.
     detail_level: DetailLevel
-    show_contributor: bool
     show_financials: bool
 
 
@@ -168,6 +220,18 @@ class ApprovalStageRecord(BaseModel):
     is_actionable: bool = False
 
 
+class CharterMilestone(BaseModel):
+    """One milestone agreed in the charter. Tasks and progress are added in delivery."""
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4)
+    title: str = Field(default="", max_length=200)
+    owner_user_id: uuid.UUID | None = None
+    owner_name: str = Field(default="", max_length=200)
+    due_date: date | None = None
+    weight: Decimal = Field(default=Decimal(0), ge=0, le=100)
+    benefits_start: bool = False
+
+
 class CharterActionItem(BaseModel):
     action: str = Field(default="", max_length=500)
     plan_start: date | None = None
@@ -195,6 +259,8 @@ class CharterMonthlyRecord(CharterMonthlyEntry):
 class ProjectCharterCommand(BaseModel):
     sponsor: str = Field(default="", max_length=200)
     leader: str = Field(default="", max_length=200)
+    sponsor_user_id: uuid.UUID | None = None
+    leader_user_id: uuid.UUID | None = None
     department_id: uuid.UUID | None = None
     site_id: uuid.UUID | None = None
     start_date: date | None = None
@@ -210,6 +276,7 @@ class ProjectCharterCommand(BaseModel):
     impact_areas: list[ImpactType] = Field(default_factory=list, max_length=5)
     belt_level: str | None = Field(default=None, max_length=40)
     action_items: list[CharterActionItem] = Field(default_factory=list, max_length=200)
+    milestone_plan: list[CharterMilestone] = Field(default_factory=list, max_length=30)
     monthly_tracking: list[CharterMonthlyEntry] = Field(default_factory=list, max_length=12)
 
     @model_validator(mode="after")
@@ -232,6 +299,44 @@ class ProjectCharterRecord(ProjectCharterCommand):
     submitted_at: datetime | None
     team_invitations_queued: int = 0
     team_invitations_skipped: int = 0
+
+
+class CharterIdeaContext(BaseModel):
+    """What the approved idea already says, shown on the charter as "From the approved idea"."""
+
+    id: uuid.UUID
+    reference: str
+    title: str
+    idea_type: str
+    project_subtype: str | None
+    submitter_name: str
+    submitter_user_id: uuid.UUID
+    site_id: uuid.UUID | None
+    site: str | None
+    department_id: uuid.UUID | None
+    department: str | None
+    category: str | None
+    subcategory: str | None
+    impacts: list[str]
+    current_state: str
+    baseline_uom: str
+    target_state: str
+    target_uom: str
+    target_completion_date: date | None
+    estimated_annual_saving: Decimal | None
+    cost_avoidance: Decimal | None
+    investment_required: Decimal | None
+    kpi_hint: str
+    suggested_benefit_type: str
+
+
+class CharterWorkspaceRecord(BaseModel):
+    project_id: uuid.UUID
+    project_reference: str
+    project_status: str
+    can_edit: bool
+    charter: ProjectCharterRecord
+    idea: CharterIdeaContext
 
 
 class IdeaDetailRecord(BaseModel):
@@ -272,6 +377,7 @@ class IdeaDetailRecord(BaseModel):
     charter_available: bool
     charter: ProjectCharterRecord | None
     can_edit_charter: bool
+    project_id: uuid.UUID | None = None
     can_edit_idea: bool
     correction_reason: str | None
 
@@ -318,3 +424,4 @@ class ApprovalWorkItem(BaseModel):
 class HomeWorkspaceSummary(BaseModel):
     ideas: list[HomeIdeaSummary]
     approval_items: list[ApprovalWorkItem]
+    join_requests: list[JoinRequestRecord] = Field(default_factory=list)

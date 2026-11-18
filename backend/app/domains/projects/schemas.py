@@ -1,6 +1,7 @@
 import uuid
 from datetime import date, datetime
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -52,7 +53,9 @@ class ProjectActionCommand(BaseModel):
     owner_name: str = Field(default="", max_length=200)
     owner_user_id: uuid.UUID | None = None
     due_date: date | None = None
-    status: str = Field(default="not_started", pattern="^(not_started|in_progress|blocked|complete)$")
+    status: str = Field(
+        default="not_started", pattern="^(not_started|in_progress|blocked|complete)$"
+    )
     notes: str = Field(default="", max_length=2000)
 
 
@@ -74,6 +77,11 @@ class ProjectMilestoneRecord(BaseModel):
     evidence: str
     dependency_ids: list[uuid.UUID]
     actions: list[ProjectActionRecord]
+    baseline_planned_end: date | None = None
+    baseline_weight: Decimal | None = None
+    benefits_start: bool = False
+    # Days the current due date sits after (+) or before (-) the charter baseline.
+    variance_days: int | None = None
 
 
 class ProjectMilestoneCommand(BaseModel):
@@ -89,7 +97,9 @@ class ProjectMilestoneCommand(BaseModel):
     actual_end: date | None = None
     weight: Decimal = Field(ge=0, le=100)
     progress: Decimal = Field(ge=0, le=100)
-    status: str = Field(default="not_started", pattern="^(not_started|in_progress|blocked|complete)$")
+    status: str = Field(
+        default="not_started", pattern="^(not_started|in_progress|blocked|complete)$"
+    )
     completion_criteria: str = Field(default="", max_length=2000)
     evidence: str = Field(default="", max_length=4000)
     dependency_ids: list[uuid.UUID] = Field(default_factory=list, max_length=20)
@@ -117,8 +127,59 @@ class ProjectMilestonePlanCommand(BaseModel):
         for milestone in self.milestones:
             dependencies = set(milestone.dependency_ids)
             if milestone.id in dependencies or not dependencies.issubset(known):
-                raise ValueError("Milestone dependencies must reference another milestone in this project.")
+                raise ValueError(
+                    "Milestone dependencies must reference another milestone in this project."
+                )
         return self
+
+
+MilestoneStatus = Literal["not_started", "in_progress", "blocked", "complete"]
+
+
+class MilestonePatchCommand(BaseModel):
+    """Change one milestone. Only the fields sent are changed."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    outcome: str | None = Field(default=None, max_length=2000)
+    owner_user_id: uuid.UUID | None = None
+    planned_start: date | None = None
+    planned_end: date | None = None
+    actual_start: date | None = None
+    actual_end: date | None = None
+    weight: Decimal | None = Field(default=None, ge=0, le=100)
+    progress: Decimal | None = Field(default=None, ge=0, le=100)
+    status: MilestoneStatus | None = None
+    completion_criteria: str | None = Field(default=None, max_length=2000)
+    evidence: str | None = Field(default=None, max_length=4000)
+    benefits_start: bool | None = None
+    # Required when the change moves the charter baseline (due date, weight, or title).
+    reason: str = Field(default="", max_length=500)
+
+
+class MilestoneCreateCommand(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    owner_user_id: uuid.UUID | None = None
+    planned_end: date | None = None
+    weight: Decimal = Field(default=Decimal(0), ge=0, le=100)
+    reason: str = Field(default="", max_length=500)
+
+
+class MilestoneMoveCommand(BaseModel):
+    direction: Literal["up", "down"]
+
+
+class TaskCreateCommand(BaseModel):
+    title: str = Field(min_length=1, max_length=500)
+    owner_user_id: uuid.UUID | None = None
+    due_date: date | None = None
+
+
+class TaskPatchCommand(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    owner_user_id: uuid.UUID | None = None
+    due_date: date | None = None
+    status: MilestoneStatus | None = None
+    notes: str | None = Field(default=None, max_length=2000)
 
 
 class ProjectTeamMemberRecord(BaseModel):
@@ -165,13 +226,49 @@ class ProjectCharterSnapshotRecord(BaseModel):
 
 
 class ProjectBenefitPeriodRecord(BaseModel):
-    month: str
+    month: str  # YYYY-MM
     plan: Decimal
     achieved: Decimal
     line_of_sight: Decimal
     kpi_actual: Decimal | None
     status: str
     finance_approved: bool
+    has_actual: bool = False
+    notes: str = ""
+    finance_status: str = "open"
+    finance_comment: str = ""
+
+
+class BenefitTrackingRecord(BaseModel):
+    """Where benefit tracking stands for a project."""
+
+    # waiting: the benefits-start milestone isn't complete; open: months are being recorded;
+    # unplanned: no milestone marks when benefits start yet.
+    state: Literal["waiting", "open", "unplanned"]
+    milestone_title: str | None = None
+    milestone_due: date | None = None
+    milestone_status: str | None = None
+    annual_target: Decimal  # ₹ lakhs a year, from the approved idea
+    kpi_only: bool
+    kpi_name: str = ""
+    kpi_baseline: str = ""
+    kpi_target: str = ""
+    can_record: bool
+    can_validate: bool
+
+
+class BenefitMonthCommand(BaseModel):
+    plan: Decimal | None = Field(default=None, ge=0, le=Decimal(999999))
+    actual: Decimal | None = Field(default=None, ge=Decimal(-999999), le=Decimal(999999))
+    line_of_sight: Decimal | None = Field(default=None, ge=0, le=Decimal(999999))
+    kpi_actual: Decimal | None = None
+    status: Literal["", "on_track", "delayed", "achieved"] | None = None
+    notes: str | None = Field(default=None, max_length=1000)
+
+
+class BenefitReviewCommand(BaseModel):
+    decision: Literal["validate", "challenge"]
+    comment: str = Field(default="", max_length=1000)
 
 
 class ProjectWorkspaceRecord(BaseModel):
@@ -199,6 +296,7 @@ class ProjectWorkspaceRecord(BaseModel):
     projected_outcome: Decimal
     charter: ProjectCharterSnapshotRecord
     benefit_periods: list[ProjectBenefitPeriodRecord]
+    benefits: BenefitTrackingRecord | None = None
     milestones: list[ProjectMilestoneRecord]
     team: list[ProjectTeamMemberRecord]
     baselines: list[ProjectBaselineRecord]

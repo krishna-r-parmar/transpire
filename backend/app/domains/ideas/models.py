@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -99,6 +100,8 @@ class IdeaBankPolicy(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base
     __table_args__ = (UniqueConstraint("tenant_id", name="uq_idea_bank_policies_tenant"),)
 
     detail_level: Mapped[str] = mapped_column(String(24), nullable=False, default="operational")
+    # No longer read: owner and team names are always shown so people can find and join improvements.
+    # Kept until a later migration drops the column.
     show_contributor: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     show_financials: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
@@ -147,6 +150,13 @@ class ProjectCharter(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base
     )
     sponsor: Mapped[str] = mapped_column(String(200), nullable=False, default="")
     leader: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    # People picked from the workspace. The name columns above keep a readable snapshot.
+    sponsor_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    leader_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     department_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("configuration_items.id", ondelete="RESTRICT"), nullable=True
     )
@@ -172,7 +182,52 @@ class ProjectCharter(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base
     action_items: Mapped[list[dict[str, object]]] = mapped_column(
         JSONB, nullable=False, default=list
     )
+    # Milestones agreed in the charter. Submitting turns them into the project's baseline plan.
+    milestone_plan: Mapped[list[dict[str, object]]] = mapped_column(
+        JSONB, nullable=False, default=list
+    )
     monthly_tracking: Mapped[list[dict[str, object]]] = mapped_column(
         JSONB, nullable=False, default=list
     )
     submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class JoinRequestStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+    WITHDRAWN = "withdrawn"
+
+
+class IdeaJoinRequest(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base):
+    """A colleague asking to help deliver an approved idea. The idea's owner accepts or declines."""
+
+    __tablename__ = "idea_join_requests"
+    __table_args__ = (
+        Index("ix_idea_join_requests_tenant_idea_status", "tenant_id", "idea_id", "status"),
+        Index(
+            "uq_idea_join_requests_one_pending",
+            "idea_id",
+            "requester_user_id",
+            unique=True,
+            postgresql_where=text("status = 'pending'"),
+        ),
+    )
+
+    idea_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ideas.id", ondelete="CASCADE"), nullable=False
+    )
+    requester_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    membership_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("memberships.id", ondelete="CASCADE"), nullable=False
+    )
+    message: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=JoinRequestStatus.PENDING.value
+    )
+    decided_by_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

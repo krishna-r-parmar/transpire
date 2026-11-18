@@ -2,9 +2,9 @@
   display: grid;
   min-height: 100svh;
   place-content: center;
-  background: oklch(98.5% .006 240);
-  color: oklch(45% .03 248);
-  font-size: .875rem;
+  background: var(--field);
+  color: var(--muted);
+  font-size: var(--tp-text-sm);
   font-weight: 750;
 }
 
@@ -52,10 +52,8 @@
 .benefitSummary header > p {
   margin: 0 0 .25rem;
   color: var(--blue-deep);
-  font-size: .75rem;
+  font-size: var(--tp-text-xs);
   font-weight: 820;
-  letter-spacing: .08em;
-  text-transform: uppercase;
 }
 
 .benefitSummary h3 {
@@ -138,7 +136,7 @@
   border-radius: .25rem;
   padding: .55rem 1rem;
   background: var(--blue);
-  color: oklch(98% .006 240);
+  color: var(--on-accent);
   font-size: var(--tp-text-sm);
   font-weight: 760;
   text-decoration: none;
@@ -157,18 +155,16 @@
   width: 100%;
   min-width: 68rem;
   border-collapse: collapse;
-  font-size: .9rem;
+  font-size: var(--tp-text-sm);
 }
 
 .tableWrap th {
   padding: .7rem 1rem;
   background: var(--panel);
   color: var(--muted);
-  font-size: .75rem;
+  font-size: var(--tp-text-xs);
   font-weight: 800;
-  letter-spacing: .06em;
   text-align: left;
-  text-transform: uppercase;
   white-space: nowrap;
 }
 
@@ -258,7 +254,7 @@
 }
 
 .bar[data-tone="warning"] > span {
-  background: oklch(70% .14 75);
+  background: var(--tp-warning-line);
 }
 
 .bar[data-tone="danger"] > span {
@@ -322,7 +318,7 @@
 .skeleton span {
   height: 4.5rem;
   border-radius: .25rem;
-  background: oklch(93% .015 242);
+  background: var(--hover);
   animation: pulse 800ms ease-in-out infinite alternate;
 }
 

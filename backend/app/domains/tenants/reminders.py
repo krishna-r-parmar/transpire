@@ -89,6 +89,26 @@ def _template_data(
     }
 
 
+async def last_sign_ins(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    user_ids: list[uuid.UUID],
+) -> dict[uuid.UUID, datetime]:
+    """When each user last signed in to this workspace (start of their latest full session)."""
+    if not user_ids:
+        return {}
+    rows = await session.execute(
+        select(AuthSession.user_id, func.max(AuthSession.created_at))
+        .where(
+            AuthSession.tenant_id == tenant_id,
+            AuthSession.user_id.in_(user_ids),
+            AuthSession.scope == "full",
+        )
+        .group_by(AuthSession.user_id)
+    )
+    return dict(rows.all())
+
+
 async def _member_activity(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -117,19 +137,7 @@ async def _member_activity(
 
     user_ids = [user.id for _, user in members]
     emails = [user.email for _, user in members]
-    sign_ins = dict(
-        (
-            await session.execute(
-                select(AuthSession.user_id, func.max(AuthSession.created_at))
-                .where(
-                    AuthSession.tenant_id == tenant_id,
-                    AuthSession.user_id.in_(user_ids),
-                    AuthSession.scope == "full",
-                )
-                .group_by(AuthSession.user_id)
-            )
-        ).all()
-    )
+    sign_ins = await last_sign_ins(session, tenant_id, user_ids)
     reminders = {
         recipient: (last_sent, count)
         for recipient, last_sent, count in (
