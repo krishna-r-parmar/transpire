@@ -1,0 +1,16 @@
+Share your view on an idea.
+
+Hi {{ recipient_name.split(' ')[0] }}, {{ submitter_name }}'s idea has reached the {{ stage_name }} step. Before {{ approver_names }} decides, your comments are welcome. Practical concerns are especially useful.
+
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
+
+Reference: {{ idea_reference }}
+Idea: {{ idea_title }}
+Submitted by: {{ submitter_name }}
+Problem: {{ problem_statement }}
+Estimated annual saving: {{ estimated_saving }}
+
+Comments are optional and don't block the decision. The approver sees every comment and can reply.
+
+{% include "_footer.txt" %}

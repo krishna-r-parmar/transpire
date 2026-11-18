@@ -14,9 +14,12 @@ from app.domains.profiles.schemas import (
     ProfileSettings,
     ProfileSummary,
     ProfileUpdateCommand,
+    TourId,
+    TourProgress,
 )
 
 MAX_PROFILE_PHOTO_BYTES = 2 * 1024 * 1024
+TOURS_KEY = "tours"
 
 
 class InvalidProfilePhotoError(Exception):
@@ -98,7 +101,12 @@ async def update_profile(
         await apply_tenant_to_transaction(session, tenant_id)
         user = await session.get(User, user_id)
         user.display_name = command.display_name.strip()
-        user.profile_settings = command.settings.model_dump()
+        # Tour progress lives beside the editable settings; a profile save must not reset it.
+        tours = (user.profile_settings or {}).get(TOURS_KEY)
+        user.profile_settings = {
+            **command.settings.model_dump(),
+            **({TOURS_KEY: tours} if tours else {}),
+        }
     return await read_profile(tenant_id, tenant_name, user_id, roles, session)
 
 
@@ -144,3 +152,36 @@ async def read_profile_photo(
         if user.avatar_data is None or user.avatar_content_type is None:
             raise InvalidProfilePhotoError("Profile photo not found.")
         return user.avatar_data, user.avatar_content_type, user.avatar_updated_at or user.updated_at
+
+
+def _tour_progress(settings: dict[str, object] | None) -> TourProgress:
+    raw = (settings or {}).get(TOURS_KEY)
+    if not isinstance(raw, dict):
+        return TourProgress()
+    return TourProgress(seen={key: value for key, value in raw.items() if isinstance(value, int)})
+
+
+async def read_tour_progress(
+    tenant_id: uuid.UUID, user_id: uuid.UUID, session: AsyncSession
+) -> TourProgress:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        user = await session.get(User, user_id)
+        return _tour_progress(user.profile_settings)
+
+
+async def mark_tour_seen(
+    tenant_id: uuid.UUID,
+    user_id: uuid.UUID,
+    tour_id: TourId,
+    version: int,
+    session: AsyncSession,
+) -> TourProgress:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        user = await session.get(User, user_id)
+        progress = _tour_progress(user.profile_settings)
+        progress.seen[tour_id] = max(version, progress.seen.get(tour_id, 0))
+        # Reassign rather than mutate so SQLAlchemy persists the JSONB change.
+        user.profile_settings = {**(user.profile_settings or {}), TOURS_KEY: progress.seen}
+        return progress

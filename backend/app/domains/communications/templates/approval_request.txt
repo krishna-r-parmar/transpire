@@ -1,0 +1,17 @@
+An idea needs your decision.
+
+Hi {{ recipient_name.split(' ')[0] }}, {{ submitter_name }} submitted an idea and it has reached the {{ stage_name }} step, which is yours.
+
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
+
+Reference: {{ idea_reference }}
+Idea: {{ idea_title }}
+Submitted by: {{ submitter_name }}
+Problem: {{ problem_statement }}
+Estimated annual saving: {{ estimated_saving }}
+Please respond by: {{ due }}
+
+Read any review comments from colleagues before you decide. You can approve, ask for changes, or reject.
+
+{% include "_footer.txt" %}

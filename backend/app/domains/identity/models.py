@@ -87,6 +87,9 @@ class Membership(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base):
         default=MembershipStatus.INVITED,
     )
     employee_number: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    # "manual" accounts are never deactivated by the HR directory sync; "hr_directory"
+    # accounts were created by it and follow the HR file.
+    provisioned_by: Mapped[str] = mapped_column(String(24), nullable=False, default="manual")
     failed_sign_in_attempts: Mapped[int] = mapped_column(nullable=False, default=0)
     locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

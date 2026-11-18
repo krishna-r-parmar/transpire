@@ -1,0 +1,10 @@
+{# Shared plain-text footer, included at the end of every .txt template. Mirrors the HTML small print. #}
+Ideate. Transform. Inspire.
+{% if secondary_url is defined %}You're receiving this as a member of {{ tenant_name }} on TRANSPIRE.
+Manage preferences: {{ secondary_url }}
+{% else %}Automated message from TRANSPIRE{% if tenant_name is defined %} for {{ tenant_name }}{% endif %}.
+{% endif %}
+
+This email is confidential and meant only for the person it is addressed to. If you received it by mistake, please delete it and let your TRANSPIRE administrator know. This mailbox isn't monitored, so replies won't be read.
+
+© {{ current_year }} {% if tenant_name is defined %}{{ tenant_name }}{% else %}TRANSPIRE{% endif %}. All rights reserved.{% if tenant_name is defined %} Powered by TRANSPIRE.{% endif %}

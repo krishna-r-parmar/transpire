@@ -1,0 +1,10 @@
+{% extends "base_modern.html" %}
+{% from "_components.html" import details, closing %}
+{% block preheader %}{{ member_name }} now has {{ new_role }} access in {{ tenant_name }}.{% endblock %}
+{% block badge %}Security notice{% endblock %}
+{% block title %}Someone was given elevated access.{% endblock %}
+{% block intro %}Hi {{ recipient_name.split(' ')[0] }}, as a Workspace Owner you are told whenever someone gains administrative access. {{ changed_by }} made {{ member_name }} a {{ new_role }}.{% endblock %}
+{% block body %}
+  {{ details([("Person", member_name), ("Email", member_email), ("Previous role", previous_role), ("New role", new_role), ("Changed by", changed_by)]) }}
+  {{ closing("If this was not expected, review the People page and change the role back.") }}
+{% endblock %}

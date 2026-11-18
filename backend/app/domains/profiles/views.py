@@ -7,8 +7,10 @@ from app.domains.identity.dependencies import (
 )
 from app.domains.profiles.controllers import (
     InvalidProfilePhotoError,
+    mark_tour_seen,
     read_profile,
     read_profile_photo,
+    read_tour_progress,
     remove_profile_photo,
     save_profile_photo,
     update_profile,
@@ -17,6 +19,9 @@ from app.domains.profiles.schemas import (
     ProfilePhotoResult,
     ProfileSummary,
     ProfileUpdateCommand,
+    TourId,
+    TourProgress,
+    TourSeenCommand,
 )
 
 router = APIRouter(prefix="/profile", tags=["profile"])
@@ -102,3 +107,25 @@ async def delete_profile_photo(
 ) -> Response:
     await remove_profile_photo(tenant.tenant_id, identity.user.id, session)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/tours", response_model=TourProgress)
+async def get_tour_progress(
+    identity: AuthenticatedIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> TourProgress:
+    return await read_tour_progress(tenant.tenant_id, identity.user.id, session)
+
+
+@router.put("/tours/{tour_id}", response_model=TourProgress)
+async def put_tour_seen(
+    tour_id: TourId,
+    command: TourSeenCommand,
+    identity: AuthenticatedIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> TourProgress:
+    return await mark_tour_seen(
+        tenant.tenant_id, identity.user.id, tour_id, command.version, session
+    )

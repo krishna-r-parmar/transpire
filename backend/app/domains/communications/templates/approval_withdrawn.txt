@@ -1,0 +1,14 @@
+This approval is no longer yours.
+
+Hi {{ recipient_name.split(' ')[0] }}, the {{ stage_name }} step for {{ idea_reference }} was moved to someone else, so you don't need to act on it.
+
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
+
+Reference: {{ idea_reference }}
+Idea: {{ idea_title }}
+Why: {{ reason }}
+
+This usually follows a change in the HR directory, such as a new head of department.
+
+{% include "_footer.txt" %}

@@ -295,16 +295,61 @@ async def test_platform_provisioning_invitation_and_tenant_admin_journey() -> No
             await tenant_client.get(f"{tenant_prefix}/ideas/{disposable_draft.json()['id']}/edit")
         ).status_code == 404
 
-        draft_idea = await tenant_client.post(
-            f"{tenant_prefix}/ideas",
-            json=idea_command,
+        # Approvers cannot approve their own ideas, so a separate Contributor submits.
+        submitter_email = f"submitter-{suffix}@example.com"
+        submitter_invite = await tenant_client.post(
+            f"{tenant_prefix}/admin/invitations",
+            json={
+                "email": submitter_email,
+                "display_name": "Journey Submitter",
+                "role_key": "idea_submitter",
+            },
             headers={"X-CSRF-Token": tenant_csrf},
         )
+        assert submitter_invite.status_code == 202, submitter_invite.text
+        async with session_factory() as session, session.begin():
+            await apply_tenant_to_transaction(session, uuid.UUID(tenant_id))
+            submitter_delivery = await session.scalar(
+                select(EmailDelivery)
+                .where(EmailDelivery.recipient == submitter_email)
+                .order_by(EmailDelivery.created_at.desc())
+                .limit(1)
+            )
+        assert submitter_delivery is not None
+        submitter_token = parse_qs(
+            urlparse(
+                str(
+                    decrypt_template_data(submitter_delivery.encrypted_template_data, settings)[
+                        "action_url"
+                    ]
+                )
+            ).query
+        )["token"][0]
+        submitter_client = httpx.AsyncClient(transport=transport, base_url="http://localhost")
+        assert (
+            await submitter_client.post(
+                "/api/v1/auth/invitations/accept",
+                json={"token": submitter_token, "new_password": administrator_password},
+            )
+        ).status_code == 200
+        assert (
+            await submitter_client.post(
+                f"{tenant_prefix}/auth/sign-in",
+                json={"email": submitter_email, "password": administrator_password},
+            )
+        ).status_code == 200
+        submitter_csrf = submitter_client.cookies.get(settings.csrf_cookie_name)
+
+        draft_idea = await submitter_client.post(
+            f"{tenant_prefix}/ideas",
+            json=idea_command,
+            headers={"X-CSRF-Token": submitter_csrf},
+        )
         assert draft_idea.status_code == 201, draft_idea.text
-        submitted_idea = await tenant_client.post(
+        submitted_idea = await submitter_client.post(
             f"{tenant_prefix}/ideas/{draft_idea.json()['id']}/submit",
             json=idea_command,
-            headers={"X-CSRF-Token": tenant_csrf},
+            headers={"X-CSRF-Token": submitter_csrf},
         )
         assert submitted_idea.status_code == 200, submitted_idea.text
         idea_bank = await tenant_client.get(f"{tenant_prefix}/ideas")
@@ -346,14 +391,14 @@ async def test_platform_provisioning_invitation_and_tenant_admin_journey() -> No
         )
         assert correction.status_code == 200, correction.text
         assert correction.json()["status"] == "needs_correction"
-        correction_edit = await tenant_client.get(
+        correction_edit = await submitter_client.get(
             f"{tenant_prefix}/ideas/{draft_idea.json()['id']}/edit"
         )
         assert correction_edit.status_code == 200, correction_edit.text
         assert correction_edit.json()["correction_reason"] == (
             "Clarify the measured improvement target."
         )
-        correction_home = await tenant_client.get(f"{tenant_prefix}/ideas/home-summary")
+        correction_home = await submitter_client.get(f"{tenant_prefix}/ideas/home-summary")
         correction_summary = next(
             idea
             for idea in correction_home.json()["ideas"]
@@ -368,17 +413,17 @@ async def test_platform_provisioning_invitation_and_tenant_admin_journey() -> No
             **idea_command,
             "target_state": "8 measured minutes per packaging batch",
         }
-        saved_correction = await tenant_client.put(
+        saved_correction = await submitter_client.put(
             f"{tenant_prefix}/ideas/{draft_idea.json()['id']}",
             json=corrected_command,
-            headers={"X-CSRF-Token": tenant_csrf},
+            headers={"X-CSRF-Token": submitter_csrf},
         )
         assert saved_correction.status_code == 200, saved_correction.text
         assert saved_correction.json()["status"] == "needs_correction"
-        resubmitted = await tenant_client.post(
+        resubmitted = await submitter_client.post(
             f"{tenant_prefix}/ideas/{draft_idea.json()['id']}/resubmit",
             json=corrected_command,
-            headers={"X-CSRF-Token": tenant_csrf},
+            headers={"X-CSRF-Token": submitter_csrf},
         )
         assert resubmitted.status_code == 200, resubmitted.text
         assert resubmitted.json()["status"] == "submitted"
@@ -396,6 +441,7 @@ async def test_platform_provisioning_invitation_and_tenant_admin_journey() -> No
             for stage in rounds
             if stage["round_number"] == 2 and stage["stage_order"] == 1
         )["status"] == "pending"
+        await submitter_client.aclose()
         tenant_audit = await tenant_client.get(f"{tenant_prefix}/audit/events?page_size=100")
         assert tenant_audit.status_code == 200, tenant_audit.text
         assert tenant_audit.json()["tenant_scope"] is True

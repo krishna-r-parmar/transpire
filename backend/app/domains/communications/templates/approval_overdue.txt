@@ -1,0 +1,15 @@
+An approval is overdue.
+
+Hi {{ recipient_name.split(' ')[0] }}, {{ submitter_name }}'s idea has been waiting at the {{ stage_name }} step for {{ overdue_by }} past its due time.{% if final_reminder %} This is the last reminder; your manager has also been told so they can help unblock it.{% endif %}
+
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
+
+Reference: {{ idea_reference }}
+Idea: {{ idea_title }}
+Was due: {{ due }}
+Reminder: {{ reminder_number }} of 3
+
+If you are not the right person to decide, ask a Workspace Admin to update the approval route or the HR directory.
+
+{% include "_footer.txt" %}

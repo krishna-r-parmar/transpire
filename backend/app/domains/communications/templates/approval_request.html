@@ -1,0 +1,10 @@
+{% extends "base_modern.html" %}
+{% from "_components.html" import details, closing %}
+{% block preheader %}{{ idea_reference }} is waiting for your decision at {{ stage_name }}.{% endblock %}
+{% block badge %}Approval needed{% endblock %}
+{% block title %}An idea needs your decision.{% endblock %}
+{% block intro %}Hi {{ recipient_name.split(' ')[0] }}, {{ submitter_name }} submitted an idea and it has reached the {{ stage_name }} step, which is yours.{% endblock %}
+{% block body %}
+  {{ details([("Reference", idea_reference), ("Idea", idea_title), ("Submitted by", submitter_name), ("Problem", problem_statement), ("Estimated annual saving", estimated_saving), ("Please respond by", due)]) }}
+  {{ closing("Read any review comments from colleagues before you decide. You can approve, ask for changes, or reject.") }}
+{% endblock %}

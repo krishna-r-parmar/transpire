@@ -22,6 +22,17 @@ class Settings(BaseSettings):
     environment: str = "development"
     debug: bool = False
     api_v1_prefix: str = "/api/v1"
+    # Where the HR file fetcher drops the daily employee report, one sub-folder per
+    # workspace shortname (e.g. backend/file/hrms_data/transpire-local/report.xlsx).
+    hr_directory_inbox_dir: str = Field(
+        default=str(REPO_ROOT / "backend" / "file" / "hrms_data"),
+        validation_alias="HR_DIRECTORY_INBOX_DIR",
+    )
+    # Customers' SFTP servers are reached directly. Loopback, link-local (including cloud
+    # metadata), multicast and reserved addresses are always refused, and private ranges
+    # unless listed here (comma-separated CIDRs, e.g. "10.20.0.0/16" for a VPN).
+    hr_sftp_allowed_networks: str = Field(default="", validation_alias="HR_SFTP_ALLOWED_NETWORKS")
+    hr_sftp_timeout_seconds: float = Field(default=20.0, validation_alias="HR_SFTP_TIMEOUT_SECONDS")
     database_url: str = Field(
         default="postgresql+asyncpg://transpire:change-me@localhost:5432/transpire",
         validation_alias="DATABASE_URL",

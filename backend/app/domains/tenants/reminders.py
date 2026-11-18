@@ -208,7 +208,10 @@ def preview_check_in_reminder(
     tenant: ResolvedTenant,
     settings: Settings,
 ) -> CheckInReminderPreview:
-    rendered = EmailTemplateRenderer(public_app_url=settings.public_app_url).render(
+    # Shown in a browser, which can't resolve the embedded cid: images, so link them instead.
+    rendered = EmailTemplateRenderer(
+        public_app_url=settings.public_app_url, inline_images=False
+    ).render(
         EmailMessage(
             tenant_id=tenant.tenant_id,
             recipient=identity.user.email,

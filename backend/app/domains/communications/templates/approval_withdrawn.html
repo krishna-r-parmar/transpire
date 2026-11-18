@@ -1,0 +1,10 @@
+{% extends "base_modern.html" %}
+{% from "_components.html" import details, closing %}
+{% block preheader %}You no longer need to review {{ idea_reference }}.{% endblock %}
+{% block badge %}No action needed{% endblock %}
+{% block title %}This approval is no longer yours.{% endblock %}
+{% block intro %}Hi {{ recipient_name.split(' ')[0] }}, the {{ stage_name }} step for {{ idea_reference }} was moved to someone else, so you don't need to act on it.{% endblock %}
+{% block body %}
+  {{ details([("Reference", idea_reference), ("Idea", idea_title), ("Why", reason)]) }}
+  {{ closing("This usually follows a change in the HR directory, such as a new head of department.") }}
+{% endblock %}

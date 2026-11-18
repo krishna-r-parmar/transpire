@@ -1,6 +1,6 @@
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -14,12 +14,28 @@ from app.domains.audit.controllers import record_audit_event
 from app.domains.communications.controllers import enqueue_email
 from app.domains.communications.schemas import EmailMessage
 from app.domains.configuration.models import (
+    ApproverGroup,
     ConfigurationItem,
     DepartmentSite,
     WorkflowDefinition,
     WorkflowVersion,
     WorkflowVersionStatus,
 )
+from app.domains.ideas.approval_notifications import (
+    IDEA_PREFERENCE,
+    dispatch_approval_notifications,
+    notify_submitter_of_decision,
+    wants_email,
+)
+from app.domains.ideas.approval_routing import (
+    activate_next_step,
+    approver_label,
+    close_round,
+    collapse_steps,
+    complete_task,
+    instantiate_round,
+)
+from app.domains.ideas.comments import unanswered_for
 from app.domains.ideas.fx import ExchangeRateUnavailableError, get_inr_usd_rate
 from app.domains.ideas.models import (
     Idea,
@@ -59,8 +75,8 @@ from app.domains.ideas.schemas import (
     ProjectCharterCommand,
     ProjectCharterRecord,
 )
-from app.domains.identity.access import ADMIN_ROLE_KEYS, can_contribute, is_workspace_admin
-from app.domains.identity.models import Membership, MembershipStatus, Role, User, membership_roles
+from app.domains.identity.access import can_contribute, is_workspace_admin
+from app.domains.identity.models import Membership, MembershipStatus, User
 from app.domains.projects.controllers import (
     assign_project_team,
     create_baseline_milestones,
@@ -73,6 +89,12 @@ from app.domains.tenants.models import Tenant
 
 class IdeaNotFoundError(Exception):
     pass
+
+
+class CommentsNeedReviewError(Exception):
+    def __init__(self, count: int) -> None:
+        super().__init__(count)
+        self.count = count
 
 
 class IdeaValidationError(Exception):
@@ -174,27 +196,6 @@ def _charter_record(charter: ProjectCharter) -> ProjectCharterRecord:
     )
 
 
-async def _resolve_fallback_approver(
-    session: AsyncSession, tenant_id: uuid.UUID
-) -> tuple[Membership, User] | None:
-    return (
-        await session.execute(
-            select(Membership, User)
-            .join(User, User.id == Membership.user_id)
-            .join(membership_roles, membership_roles.c.membership_id == Membership.id)
-            .join(Role, Role.id == membership_roles.c.role_id)
-            .where(
-                Membership.tenant_id == tenant_id,
-                Membership.status == MembershipStatus.ACTIVE,
-                Role.tenant_id == tenant_id,
-                Role.key.in_(ADMIN_ROLE_KEYS),
-            )
-            .order_by(User.display_name)
-            .limit(1)
-        )
-    ).first()
-
-
 async def _instantiate_approval_stages(
     session: AsyncSession,
     tenant_id: uuid.UUID,
@@ -202,48 +203,10 @@ async def _instantiate_approval_stages(
     version: WorkflowVersion,
     round_number: int = 1,
 ) -> None:
-    fallback = await _resolve_fallback_approver(session, tenant_id)
-    now = datetime.now(UTC)
-    for index, stage in enumerate(version.stages):
-        membership = None
-        user = None
-        membership_id = stage.get("assignee_membership_id")
-        if membership_id:
-            row = (
-                await session.execute(
-                    select(Membership, User)
-                    .join(User, User.id == Membership.user_id)
-                    .where(
-                        Membership.tenant_id == tenant_id,
-                        Membership.id == uuid.UUID(str(membership_id)),
-                        Membership.status.in_([MembershipStatus.ACTIVE, MembershipStatus.INVITED]),
-                    )
-                    .limit(1)
-                )
-            ).first()
-            if row:
-                membership, user = row
-        if membership is None or user is None:
-            if fallback is None:
-                raise IdeaValidationError("The approval contract has no available approver.")
-            membership, user = fallback
-        sla_hours = int(stage.get("sla_hours", 48))
-        session.add(
-            IdeaApprovalStage(
-                tenant_id=tenant_id,
-                idea_id=idea.id,
-                round_number=round_number,
-                stage_order=index + 1,
-                stage_key=str(stage.get("key", f"stage_{index + 1}")),
-                stage_name=str(stage.get("name", f"Approval stage {index + 1}")),
-                assignee_membership_id=membership.id,
-                assignee_user_id=user.id,
-                assignee_name=user.display_name,
-                assignee_email=user.email,
-                sla_hours=sla_hours,
-                status="pending" if index == 0 else "waiting",
-                due_at=now + timedelta(hours=sla_hours) if index == 0 else None,
-            )
+    if not await instantiate_round(session, idea, version, round_number, datetime.now(UTC)):
+        raise IdeaValidationError(
+            "No approver is available for this idea's approval route. "
+            "Ask a Workspace Admin to check the approval workflow and approver groups."
         )
 
 
@@ -465,6 +428,8 @@ async def _submit_editable_idea(
         await _instantiate_approval_stages(
             session, tenant_id, idea, workflow_version, round_number=round_number
         )
+        if settings is not None:
+            await dispatch_approval_notifications(session, idea, settings)
         record_audit_event(
             session,
             tenant_id=tenant_id,
@@ -697,11 +662,11 @@ async def get_idea_summary(
             approval_journey=[
                 IdeaJourneyStage(
                     stage_name=stage.stage_name,
-                    status=stage.status,
+                    status=status,
                     round_number=stage.round_number,
                     stage_order=stage.stage_order,
                 )
-                for stage in stages
+                for stage, status in collapse_steps(stages)
             ],
             charter_available=idea.status
             in {IdeaStatus.APPROVED, IdeaStatus.CHARTER_IN_PROGRESS, IdeaStatus.CHARTER_SUBMITTED},
@@ -772,6 +737,14 @@ async def get_catalog(tenant_id: uuid.UUID, session: AsyncSession) -> IdeaSubmis
         approval_contract = None
         if workflow_row:
             definition, version = workflow_row
+            group_names = {
+                str(group.id): group.name
+                for group in (
+                    await session.scalars(
+                        select(ApproverGroup).where(ApproverGroup.tenant_id == tenant_id)
+                    )
+                ).all()
+            }
             approval_contract = ApprovalContractPreview(
                 id=version.id,
                 name=definition.name,
@@ -782,9 +755,13 @@ async def get_catalog(tenant_id: uuid.UUID, session: AsyncSession) -> IdeaSubmis
                         key=str(stage.get("key", f"stage_{index + 1}")),
                         name=str(stage.get("name", f"Approval stage {index + 1}")),
                         approver_role=str(stage.get("approver_role", "tenant_admin")),
-                        assignee_name=stage.get("assignee_name"),
-                        assignee_email=stage.get("assignee_email"),
-                        assignee_status=stage.get("assignee_status"),
+                        assignee_name=approver_label(stage, group_names),
+                        assignee_email=stage.get("assignee_email")
+                        if stage.get("source") == "person"
+                        else None,
+                        assignee_status=stage.get("assignee_status")
+                        if stage.get("source") == "person"
+                        else None,
                         sla_hours=int(stage.get("sla_hours", 48)),
                         required=bool(stage.get("required", True)),
                     )
@@ -1083,6 +1060,9 @@ async def get_idea_detail(
                     stage_name=stage.stage_name,
                     assignee_name=stage.assignee_name,
                     assignee_email=stage.assignee_email,
+                    sequence=stage.sequence,
+                    completion=stage.completion,
+                    resolution_note=stage.resolution_note,
                     sla_hours=stage.sla_hours,
                     status=stage.status,
                     decision_comment=stage.decision_comment,
@@ -1103,6 +1083,58 @@ async def get_idea_detail(
             can_edit_idea=is_submitter
             and idea.status in {IdeaStatus.DRAFT, IdeaStatus.NEEDS_CORRECTION},
             correction_reason=correction_reason,
+        )
+
+
+async def complete_approval(
+    session: AsyncSession, tenant_id: uuid.UUID, idea: Idea, settings: Settings
+) -> None:
+    """Every step approved: open the charter and project, and tell the submitter."""
+    idea.status = IdeaStatus.APPROVED
+    submitter = await session.get(User, idea.submitter_user_id)
+    charter = prefilled_charter(
+        idea,
+        leader=submitter,
+        kpi_hint=await _subcategory_kpi(session, tenant_id, idea.subcategory_id),
+    )
+    session.add(charter)
+    await session.flush()
+    await open_project_for_approved_idea(
+        session,
+        tenant_id=tenant_id,
+        idea_id=idea.id,
+        idea_reference=idea.reference,
+        charter=charter,
+    )
+    tenant_record = await session.get(Tenant, tenant_id)
+    if submitter and wants_email(submitter, IDEA_PREFERENCE):
+        enqueue_email(
+            session,
+            EmailMessage(
+                tenant_id=tenant_id,
+                recipient=submitter.email,
+                template_key="project_charter_ready",
+                subject=f"Your idea {idea.reference} is approved",
+                template_data={
+                    "recipient_name": submitter.display_name,
+                    "tenant_name": tenant_record.name
+                    if tenant_record
+                    else "your organisation",
+                    "idea_reference": idea.reference,
+                    "idea_title": idea.title,
+                    "action_url": tenant_frontend_url(
+                        settings,
+                        tenant_record.slug if tenant_record else "",
+                        f"/ideas/{idea.id}",
+                        query={"section": "project-charter"},
+                    ),
+                    "action_label": "Complete project charter",
+                    **preferences_link(
+                        settings, tenant_record.slug if tenant_record else ""
+                    ),
+                },
+            ),
+            settings,
         )
 
 
@@ -1139,94 +1171,37 @@ async def decide_approval_stage(
             raise IdeaNotFoundError
         if idea.status != IdeaStatus.SUBMITTED:
             raise IdeaValidationError("This idea is no longer awaiting approval.")
+        unanswered = await unanswered_for(session, idea, user_id, stage.round_number)
+        if unanswered and not command.acknowledge_comments:
+            raise CommentsNeedReviewError(unanswered)
         now = datetime.now(UTC)
         stage.status = command.decision
         stage.decision_comment = command.comment.strip() or None
         stage.actioned_at = now
         if command.decision == "approve":
-            next_stage = await session.scalar(
-                select(IdeaApprovalStage)
-                .where(
-                    IdeaApprovalStage.tenant_id == tenant_id,
-                    IdeaApprovalStage.idea_id == idea_id,
-                    IdeaApprovalStage.round_number == stage.round_number,
-                    IdeaApprovalStage.stage_order > stage.stage_order,
-                    IdeaApprovalStage.status == "waiting",
-                )
-                .order_by(IdeaApprovalStage.stage_order)
-                .limit(1)
-                .with_for_update()
+            step_complete = await complete_task(session, stage, now)
+            version = (
+                await session.get(WorkflowVersion, idea.workflow_version_id)
+                if idea.workflow_version_id
+                else None
             )
-            if next_stage:
-                next_stage.status = "pending"
-                next_stage.due_at = now + timedelta(hours=next_stage.sla_hours)
-            else:
-                idea.status = IdeaStatus.APPROVED
-                submitter = await session.get(User, idea.submitter_user_id)
-                charter = prefilled_charter(
-                    idea,
-                    leader=submitter,
-                    kpi_hint=await _subcategory_kpi(session, tenant_id, idea.subcategory_id),
+            more_steps = (
+                step_complete
+                and version is not None
+                and await activate_next_step(
+                    session, idea, version, stage.round_number, after_order=stage.stage_order, now=now
                 )
-                session.add(charter)
-                await session.flush()
-                await open_project_for_approved_idea(
-                    session,
-                    tenant_id=tenant_id,
-                    idea_id=idea.id,
-                    idea_reference=idea.reference,
-                    charter=charter,
-                )
-                tenant_record = await session.get(Tenant, tenant_id)
-                if submitter:
-                    enqueue_email(
-                        session,
-                        EmailMessage(
-                            tenant_id=tenant_id,
-                            recipient=submitter.email,
-                            template_key="project_charter_ready",
-                            subject=f"Your idea {idea.reference} is approved",
-                            template_data={
-                                "recipient_name": submitter.display_name,
-                                "tenant_name": tenant_record.name
-                                if tenant_record
-                                else "your organisation",
-                                "idea_reference": idea.reference,
-                                "idea_title": idea.title,
-                                "action_url": tenant_frontend_url(
-                                    settings,
-                                    tenant_record.slug if tenant_record else "",
-                                    f"/ideas/{idea.id}",
-                                    query={"section": "project-charter"},
-                                ),
-                                "action_label": "Complete project charter",
-                                **preferences_link(
-                                    settings, tenant_record.slug if tenant_record else ""
-                                ),
-                            },
-                        ),
-                        settings,
-                    )
+            )
+            if step_complete and not more_steps:
+                await complete_approval(session, tenant_id, idea, settings)
         else:
             idea.status = (
                 IdeaStatus.NEEDS_CORRECTION
                 if command.decision == "needs_correction"
                 else IdeaStatus.REJECTED
             )
-            waiting_stages = list(
-                (
-                    await session.scalars(
-                        select(IdeaApprovalStage).where(
-                            IdeaApprovalStage.tenant_id == tenant_id,
-                            IdeaApprovalStage.idea_id == idea_id,
-                            IdeaApprovalStage.round_number == stage.round_number,
-                            IdeaApprovalStage.status == "waiting",
-                        )
-                    )
-                ).all()
-            )
-            for waiting in waiting_stages:
-                waiting.status = "cancelled"
+            await close_round(session, stage)
+            await notify_submitter_of_decision(session, idea, stage, command.decision, settings)
         action_label = {
             "approve": "approved",
             "needs_correction": "returned for correction",
@@ -1250,6 +1225,7 @@ async def decide_approval_stage(
             },
         )
         await session.flush()
+        await dispatch_approval_notifications(session, idea, settings)
     return await get_idea_detail(tenant_id, user_id, [], idea_id, session)
 
 

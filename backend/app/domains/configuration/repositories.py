@@ -24,7 +24,11 @@ class WorkflowAssigneeRecord:
 
 class SQLAlchemyConfigurationRepository:
     async def list_workflow_assignees(
-        self, session: AsyncSession, tenant_id: uuid.UUID
+        self,
+        session: AsyncSession,
+        tenant_id: uuid.UUID,
+        search: str | None = None,
+        limit: int | None = None,
     ) -> list[WorkflowAssigneeRecord]:
         pending_invitation = exists(
             select(InvitationToken.id).where(
@@ -35,24 +39,32 @@ class SQLAlchemyConfigurationRepository:
                 InvitationToken.expires_at > datetime.now(UTC),
             )
         )
-        rows = (
-            await session.execute(
-                select(Membership, User)
-                .join(User, User.id == Membership.user_id)
-                .where(
-                    Membership.tenant_id == tenant_id,
-                    contributing_membership(Membership.id, tenant_id),
-                    or_(
-                        Membership.status == MembershipStatus.ACTIVE,
-                        and_(
-                            Membership.status == MembershipStatus.INVITED,
-                            pending_invitation,
-                        ),
+        statement = (
+            select(Membership, User)
+            .join(User, User.id == Membership.user_id)
+            .where(
+                Membership.tenant_id == tenant_id,
+                contributing_membership(Membership.id, tenant_id),
+                or_(
+                    Membership.status == MembershipStatus.ACTIVE,
+                    and_(
+                        Membership.status == MembershipStatus.INVITED,
+                        pending_invitation,
                     ),
-                )
-                .order_by(User.display_name, User.email)
+                ),
             )
-        ).all()
+            .order_by(User.display_name, User.email)
+        )
+        if search is not None:
+            pattern = (
+                "%" + search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+            )
+            statement = statement.where(
+                or_(User.display_name.ilike(pattern), User.email.ilike(pattern))
+            )
+        if limit is not None:
+            statement = statement.limit(limit)
+        rows = (await session.execute(statement)).all()
         return [
             WorkflowAssigneeRecord(
                 membership=membership,

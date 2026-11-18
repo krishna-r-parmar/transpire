@@ -1,6 +1,7 @@
 import uuid
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from sqlalchemy.exc import IntegrityError
 
 from app.domains.configuration.controllers import (
@@ -8,18 +9,25 @@ from app.domains.configuration.controllers import (
     ConfigurationNotFoundError,
     create_item,
     create_workflow_version,
+    list_approver_groups,
     list_items,
     list_workflow_assignees,
     list_workflows,
+    preview_workflow,
     publish_workflow_version,
+    save_approver_group,
     update_item,
 )
 from app.domains.configuration.schemas import (
+    ApproverGroupCommand,
+    ApproverGroupSummary,
     ConfigurationItemCreate,
     ConfigurationItemSummary,
     ConfigurationItemUpdate,
     ConfigurationKind,
     WorkflowAssigneeSummary,
+    WorkflowPreviewCommand,
+    WorkflowPreviewResult,
     WorkflowSummary,
     WorkflowVersionCreate,
     WorkflowVersionSummary,
@@ -91,9 +99,13 @@ async def get_workflow_contracts(
 
 @router.get("/workflows/assignees", response_model=list[WorkflowAssigneeSummary])
 async def get_workflow_assignees(
-    _: TenantAdminIdentity, tenant: TenantDependency, session: SessionDependency
+    _: TenantAdminIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+    query: Annotated[str | None, Query(max_length=120)] = None,
 ) -> list[WorkflowAssigneeSummary]:
-    return await list_workflow_assignees(tenant.tenant_id, session)
+    """All approvers, or with ``query`` (2+ characters) the first 20 name or email matches."""
+    return await list_workflow_assignees(tenant.tenant_id, session, query)
 
 
 @router.post(
@@ -133,3 +145,64 @@ async def publish_workflow(
     except ConfigurationConflictError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     return Response(status_code=204)
+
+
+@router.get("/approver-groups", response_model=list[ApproverGroupSummary])
+async def get_approver_groups(
+    _: TenantAdminIdentity, tenant: TenantDependency, session: SessionDependency
+) -> list[ApproverGroupSummary]:
+    return await list_approver_groups(tenant.tenant_id, session)
+
+
+@router.post("/approver-groups", response_model=ApproverGroupSummary, status_code=201)
+async def post_approver_group(
+    command: ApproverGroupCommand,
+    identity: TenantAdminIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> ApproverGroupSummary:
+    try:
+        return await save_approver_group(tenant.tenant_id, identity.user.id, None, command, session)
+    except ConfigurationConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except IntegrityError as error:
+        raise HTTPException(
+            status_code=409, detail="An approver group with this name already exists."
+        ) from error
+
+
+@router.put("/approver-groups/{group_id}", response_model=ApproverGroupSummary)
+async def put_approver_group(
+    group_id: uuid.UUID,
+    command: ApproverGroupCommand,
+    identity: TenantAdminIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> ApproverGroupSummary:
+    try:
+        return await save_approver_group(
+            tenant.tenant_id, identity.user.id, group_id, command, session
+        )
+    except ConfigurationNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Approver group not found.") from error
+    except ConfigurationConflictError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except IntegrityError as error:
+        raise HTTPException(
+            status_code=409, detail="An approver group with this name already exists."
+        ) from error
+
+
+@router.post("/workflows/preview", response_model=WorkflowPreviewResult)
+async def post_workflow_preview(
+    command: WorkflowPreviewCommand,
+    _: TenantAdminIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> WorkflowPreviewResult:
+    try:
+        return await preview_workflow(tenant.tenant_id, command, session)
+    except ConfigurationNotFoundError as error:
+        raise HTTPException(
+            status_code=404, detail="That employee ID is not in the HR directory."
+        ) from error

@@ -1,0 +1,16 @@
+Someone was given elevated access.
+
+Hi {{ recipient_name.split(' ')[0] }}, as a Workspace Owner you are told whenever someone gains administrative access. {{ changed_by }} made {{ member_name }} a {{ new_role }}.
+
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
+
+Person: {{ member_name }}
+Email: {{ member_email }}
+Previous role: {{ previous_role }}
+New role: {{ new_role }}
+Changed by: {{ changed_by }}
+
+If this was not expected, review the People page and change the role back.
+
+{% include "_footer.txt" %}

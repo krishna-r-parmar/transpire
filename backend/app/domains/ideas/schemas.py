@@ -210,8 +210,11 @@ class ApprovalStageRecord(BaseModel):
     stage_order: int
     stage_key: str
     stage_name: str
-    assignee_name: str
-    assignee_email: str
+    assignee_name: str | None
+    assignee_email: str | None
+    sequence: int = 0
+    completion: str = "all"
+    resolution_note: str | None = None
     sla_hours: int
     status: str
     decision_comment: str | None
@@ -385,6 +388,8 @@ class IdeaDetailRecord(BaseModel):
 class ApprovalDecisionCommand(BaseModel):
     decision: ApprovalDecision
     comment: str = Field(default="", max_length=1000)
+    # Set after the approver has seen review comments they have not replied to.
+    acknowledge_comments: bool = False
 
     @model_validator(mode="after")
     def reason_is_present(self) -> "ApprovalDecisionCommand":

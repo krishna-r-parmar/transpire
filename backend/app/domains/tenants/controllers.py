@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.core.tenant_context import apply_tenant_to_transaction
-from app.core.urls import platform_frontend_url
+from app.core.urls import platform_frontend_url, tenant_frontend_url
 from app.domains.audit.controllers import record_audit_event
 from app.domains.communications.controllers import enqueue_email
 from app.domains.communications.models import EmailDelivery, EmailDeliveryStatus
@@ -17,6 +17,7 @@ from app.domains.configuration.controllers import (
 )
 from app.domains.ideas.services import create_default_idea_bank_policy
 from app.domains.identity.access import (
+    ADMIN_ROLE_KEYS,
     ROLES_BY_KEY,
     WORKSPACE_OWNER,
     WORKSPACE_ROLES,
@@ -139,10 +140,12 @@ async def _queue_invitation(
     tenant_name: str,
     email: str,
     display_name: str,
-    inviter: SessionIdentity,
+    inviter: SessionIdentity | None,
     role: Role,
     settings: Settings,
+    provisioned_by: str = "manual",
 ) -> InvitationResult:
+    """Queue an invitation. ``inviter`` is None for automatic HR directory provisioning."""
     user_id = await repository.ensure_invited_user(session, email, display_name)
     membership = await repository.get_membership(session, tenant_id, user_id)
     if membership and membership.status == MembershipStatus.ACTIVE:
@@ -152,6 +155,7 @@ async def _queue_invitation(
             tenant_id=tenant_id,
             user_id=user_id,
             status=MembershipStatus.INVITED,
+            provisioned_by=provisioned_by,
         )
         session.add(membership)
         await session.flush()
@@ -182,7 +186,7 @@ async def _queue_invitation(
     invitation = InvitationToken(
         tenant_id=tenant_id,
         email=email,
-        invited_by_user_id=inviter.user.id,
+        invited_by_user_id=inviter.user.id if inviter else None,
         token_hash=hash_session_token(raw_token),
         expires_at=expires_at,
         last_sent_at=now,
@@ -198,7 +202,7 @@ async def _queue_invitation(
             template_data={
                 "recipient_name": display_name,
                 "tenant_name": tenant_name,
-                "inviter_name": inviter.user.display_name,
+                "inviter_name": inviter.user.display_name if inviter else f"{tenant_name} HR",
                 "expires_in": f"{settings.invitation_expiry_hours} hours",
                 "action_label": "Accept invitation",
             },
@@ -430,12 +434,92 @@ async def list_roles(
         ]
 
 
+ROLE_MEANING = {
+    "viewer": "You can read ideas and projects in this workspace, but not create or change them.",
+    "idea_submitter": "You can submit ideas, approve when assigned, and work on your projects.",
+    "tenant_admin": (
+        "You can manage configuration, approval workflows, and Viewers and Contributors."
+    ),
+    "workspace_owner": (
+        "You have full control, including roles, sign-in and security settings."
+    ),
+}
+
+
+async def _email_role_change(
+    session: AsyncSession,
+    settings: Settings,
+    *,
+    tenant_id: uuid.UUID,
+    actor: SessionIdentity,
+    subject_user: object,
+    subject_membership_id: uuid.UUID,
+    previous: str,
+    new_role_key: str,
+) -> None:
+    """Security notices: always sent, regardless of email preferences."""
+    tenant = await repository.get_tenant(session, tenant_id)
+    if tenant is None:
+        return
+    new_name = ROLES_BY_KEY[new_role_key].name
+    people_url = tenant_frontend_url(settings, tenant.slug, "/admin/people")
+    common = {
+        "tenant_name": tenant.name,
+        "previous_role": previous,
+        "new_role": new_name,
+        "changed_by": actor.user.display_name,
+    }
+    enqueue_email(
+        session,
+        EmailMessage(
+            tenant_id=tenant_id,
+            recipient=subject_user.email,  # type: ignore[attr-defined]
+            template_key="role_changed",
+            subject=f"Your access to {tenant.name} changed to {new_name}",
+            template_data={
+                **common,
+                "recipient_name": subject_user.display_name,  # type: ignore[attr-defined]
+                "role_meaning": ROLE_MEANING[new_role_key],
+                "action_url": tenant_frontend_url(settings, tenant.slug, "/home"),
+                "action_label": "Open TRANSPIRE",
+            },
+        ),
+        settings,
+    )
+    if new_role_key not in ADMIN_ROLE_KEYS:
+        return
+    owners = await repository.lock_active_owner_membership_ids(session, tenant_id)
+    for owner_id in owners - {subject_membership_id}:
+        owner = await repository.get_membership_by_id(session, tenant_id, owner_id)
+        if owner is None or owner.user.id == actor.user.id:
+            continue
+        enqueue_email(
+            session,
+            EmailMessage(
+                tenant_id=tenant_id,
+                recipient=owner.user.email,
+                template_key="privileged_role_granted",
+                subject=f"{subject_user.display_name} is now a {new_name} in {tenant.name}",  # type: ignore[attr-defined]
+                template_data={
+                    **common,
+                    "recipient_name": owner.user.display_name,
+                    "member_name": subject_user.display_name,  # type: ignore[attr-defined]
+                    "member_email": subject_user.email,  # type: ignore[attr-defined]
+                    "action_url": people_url,
+                    "action_label": "Review people",
+                },
+            ),
+            settings,
+        )
+
+
 async def change_member_role(
     tenant_id: uuid.UUID,
     membership_id: uuid.UUID,
     role_key: str,
     actor: SessionIdentity,
     session: AsyncSession,
+    settings: Settings | None = None,
 ) -> TenantMemberSummary:
     async with session.begin():
         await apply_tenant_to_transaction(session, tenant_id)
@@ -476,6 +560,17 @@ async def change_member_role(
             ),
             details={"from": current, "to": role.key},
         )
+        if settings is not None:
+            await _email_role_change(
+                session,
+                settings,
+                tenant_id=tenant_id,
+                actor=actor,
+                subject_user=record.user,
+                subject_membership_id=membership_id,
+                previous=previous or "no role",
+                new_role_key=role.key,
+            )
         return TenantMemberSummary(
             id=membership_id,
             email=record.user.email,

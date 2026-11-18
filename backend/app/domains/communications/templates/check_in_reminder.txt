@@ -11,6 +11,4 @@ What you can do today:
 
 Small improvements add up. Thanks for being part of it.
 
-Ideate. Transform. Inspire.
-You're receiving this as a member of {{ tenant_name }} on TRANSPIRE.
-Manage preferences: {{ secondary_url }}
+{% include "_footer.txt" %}

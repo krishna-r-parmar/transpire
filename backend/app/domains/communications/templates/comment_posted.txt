@@ -1,0 +1,15 @@
+{{ author_name }} {% if is_reply %}replied{% else %}commented{% endif %}.
+
+Hi {{ recipient_name.split(' ')[0] }}, there is a new {% if is_reply %}reply{% else %}comment{% endif %} on {{ idea_reference }} while it is in approval.
+
+"{{ comment }}"
+
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
+
+Reference: {{ idea_reference }}
+Idea: {{ idea_title }}
+
+Reply in TRANSPIRE so everyone involved sees the conversation.
+
+{% include "_footer.txt" %}

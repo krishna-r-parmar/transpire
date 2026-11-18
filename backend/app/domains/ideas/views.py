@@ -3,7 +3,16 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
 
+from app.domains.ideas.comments import (
+    CommentCommand,
+    CommentForbiddenError,
+    CommentNotFoundError,
+    CommentThread,
+    get_comment_thread,
+    post_comment,
+)
 from app.domains.ideas.controllers import (
+    CommentsNeedReviewError,
     IdeaAccessError,
     IdeaNotFoundError,
     IdeaValidationError,
@@ -233,8 +242,58 @@ async def decide_approval(
         raise HTTPException(
             status_code=403, detail="This approval item is assigned to another person."
         ) from error
+    except CommentsNeedReviewError as error:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "comments_need_review",
+                "count": error.count,
+                "message": f"{error.count} review comment(s) have no reply from you yet.",
+            },
+        ) from error
     except IdeaValidationError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/{idea_id}/comments", response_model=CommentThread)
+async def get_idea_comments(
+    idea_id: uuid.UUID,
+    identity: AuthenticatedIdentity,
+    tenant: TenantDependency,
+    session: SessionDependency,
+) -> CommentThread:
+    try:
+        return await get_comment_thread(
+            tenant.tenant_id, identity.user.id, identity.roles, idea_id, session
+        )
+    except CommentNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Idea not found.") from error
+    except CommentForbiddenError as error:
+        raise HTTPException(
+            status_code=403, detail="Review comments are open to the people involved."
+        ) from error
+
+
+@router.post("/{idea_id}/comments", response_model=CommentThread, status_code=201)
+async def add_idea_comment(
+    idea_id: uuid.UUID,
+    command: CommentCommand,
+    identity: ContributorIdentity,
+    tenant: TenantDependency,
+    settings: SettingsDependency,
+    session: SessionDependency,
+) -> CommentThread:
+    try:
+        return await post_comment(
+            tenant.tenant_id, identity.user.id, identity.roles, idea_id, command, settings, session
+        )
+    except CommentNotFoundError as error:
+        raise HTTPException(status_code=404, detail="Comment not found.") from error
+    except CommentForbiddenError as error:
+        raise HTTPException(
+            status_code=403,
+            detail="You can comment while the idea is in approval and you are involved in it.",
+        ) from error
 
 
 @router.put("/{idea_id}/charter", response_model=ProjectCharterRecord)

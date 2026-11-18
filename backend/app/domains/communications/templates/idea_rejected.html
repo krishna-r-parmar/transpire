@@ -1,0 +1,13 @@
+{% extends "base_modern.html" %}
+{% from "_components.html" import details, closing %}
+{% block preheader %}{{ idea_reference }} was not approved.{% endblock %}
+{% block badge %}Not approved{% endblock %}
+{% block title %}Your idea was not approved.{% endblock %}
+{% block intro %}Hi {{ recipient_name.split(' ')[0] }}, {{ approver_name }} reviewed your idea at the {{ stage_name }} step and decided not to take it forward.{% endblock %}
+{% block body %}
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 22px;">
+    <tr><td style="border-left:3px solid #006fae;padding:4px 0 4px 16px;font-size:15px;line-height:24px;color:#0c2340;white-space:pre-line;">{{ comment }}</td></tr>
+  </table>
+  {{ details([("Reference", idea_reference), ("Idea", idea_title), ("Step", stage_name)]) }}
+  {{ closing("Thank you for sharing it. The reasoning above may help shape your next idea.") }}
+{% endblock %}

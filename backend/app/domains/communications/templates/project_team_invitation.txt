@@ -11,5 +11,4 @@ Project lead: {{ project_lead }}
 
 Open the project to see the plan and your role.
 
-Ideate. Transform. Inspire.
-{% if secondary_url is defined %}You're receiving this as a member of {{ tenant_name }} on TRANSPIRE.{% else %}Automated message from TRANSPIRE for {{ tenant_name }}.{% endif %}
+{% include "_footer.txt" %}

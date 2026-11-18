@@ -1,0 +1,16 @@
+Your access has changed.
+
+Hi {{ recipient_name.split(' ')[0] }}, {{ changed_by }} changed your role in {{ tenant_name }} on TRANSPIRE.
+
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
+
+Workspace: {{ tenant_name }}
+Previous role: {{ previous_role }}
+New role: {{ new_role }}
+Changed by: {{ changed_by }}
+What this means: {{ role_meaning }}
+
+If you did not expect this change, contact a Workspace Owner in your organisation.
+
+{% include "_footer.txt" %}

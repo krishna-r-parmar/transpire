@@ -42,7 +42,8 @@ SAMPLES = {
 
 
 def main() -> None:
-    renderer = EmailTemplateRenderer()
+    # Browser previews link the images from the local frontend instead of embedding them.
+    renderer = EmailTemplateRenderer(inline_images=False)
     OUTPUT_DIRECTORY.mkdir(parents=True, exist_ok=True)
 
     for template_key, template_data in SAMPLES.items():

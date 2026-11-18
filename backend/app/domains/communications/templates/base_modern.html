@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:o="urn:schemas-microsoft-com:office:office">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -14,6 +14,9 @@
         .m-btn-gap { display: block !important; height: 10px !important; width: 100% !important; }
         .m-full { width: 100% !important; }
         .m-hide { display: none !important; }
+        .m-band { padding: 24px !important; }
+        .m-band-copy { width: 68% !important; }
+        .m-band-title { font-size: 18px !important; line-height: 23px !important; }
       }
     </style>
   </head>
@@ -58,14 +61,49 @@
                   <tr>
                     <td class="m-pad" style="padding:28px 44px 40px;font-size:15px;line-height:24px;color:#4a6175;">{% block body %}{% endblock %}</td>
                   </tr>
+                  <tr>
+                    {# Brand band, joined to the bottom of the card: the connected-ideas artwork sits on the right and the copy
+                       overlays its quiet left side. The solid #f3f8fc fill matches the artwork, so the band still reads well
+                       when images are blocked. Its own bottom radius matches the card's, since cells don't clip backgrounds. #}
+                    <td background="{{ footer_image_url }}" bgcolor="#f3f8fc" width="558" height="186" valign="middle" style="height:186px;background-color:#f3f8fc;background-image:url('{{ footer_image_url }}');background-position:right center;background-size:cover;background-repeat:no-repeat;border-top:1px solid #e3e9ef;border-radius:0 0 15px 15px;">
+                      <!--[if gte mso 9]>
+                      <v:rect xmlns:v="urn:schemas-microsoft-com:vml" fill="true" stroke="false" style="width:558px;height:186px;">
+                        <v:fill type="frame" src="{{ footer_image_url }}" color="#f3f8fc" />
+                        <v:textbox inset="0,0,0,0">
+                      <![endif]-->
+                      <div>
+                        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                          <tr>
+                            <td class="m-band" valign="middle" style="padding:30px 44px;">
+                              <table class="m-band-copy" role="presentation" width="270" cellspacing="0" cellpadding="0" border="0" style="width:270px;">
+                                <tr>
+                                  <td>
+                                    <p style="margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:1.4px;text-transform:uppercase;color:#006fae;">TRANSPIRE</p>
+                                    <p class="m-band-title" style="margin:0;font-size:21px;line-height:26px;font-weight:800;letter-spacing:-.4px;color:#0c2340;">Ideate. Transform. Inspire.</p>
+                                    <p style="margin:8px 0 0;font-size:13px;line-height:20px;color:#4a6175;">Every idea you share connects to the next improvement{% if tenant_name is defined %} at {{ tenant_name }}{% endif %}.</p>
+                                  </td>
+                                </tr>
+                              </table>
+                            </td>
+                          </tr>
+                        </table>
+                      </div>
+                      <!--[if gte mso 9]>
+                        </v:textbox>
+                      </v:rect>
+                      <![endif]-->
+                    </td>
+                  </tr>
                 </table>
               </td>
             </tr>
             <tr>
-              <td align="center" class="m-pad" style="padding:24px 24px 0;font-size:12px;line-height:19px;color:#7c8fa0;">
-                <p style="margin:0 0 6px;font-weight:700;color:#4a6175;">Ideate. Transform. Inspire.</p>
+              {# Small print, left-aligned with the logo above the card. #}
+              <td align="left" style="padding:22px 8px 0;font-size:12px;line-height:19px;color:#7c8fa0;text-align:left;">
                 <p style="margin:0;">{% block footer %}{% if secondary_url is defined %}You're receiving this as a member of {{ tenant_name }} on TRANSPIRE. <a href="{{ secondary_url }}" style="color:#006fae;">Manage preferences</a>{% else %}Automated message from TRANSPIRE{% if tenant_name is defined %} for {{ tenant_name }}{% endif %}.{% endif %}{% endblock %}</p>
-                <p style="margin:6px 0 0;">Button not working? <a href="{{ action_url }}" style="color:#006fae;">Open this link</a> · © {{ current_year }} TRANSPIRE</p>
+                <p style="margin:4px 0 0;">Button not working? <a href="{{ action_url }}" style="color:#006fae;">Open this link</a></p>
+                <p style="margin:14px 0 0;padding-top:14px;border-top:1px solid #dfe6ec;font-size:11px;line-height:17px;color:#8d9dab;">This email is confidential and meant only for the person it is addressed to. If you received it by mistake, please delete it and let your TRANSPIRE administrator know. This mailbox isn't monitored, so replies won't be read.</p>
+                <p style="margin:10px 0 0;font-size:11px;line-height:17px;color:#8d9dab;">© {{ current_year }} {% if tenant_name is defined %}{{ tenant_name }}{% else %}TRANSPIRE{% endif %}. All rights reserved.{% if tenant_name is defined %} Powered by TRANSPIRE.{% endif %}</p>
               </td>
             </tr>
           </table>

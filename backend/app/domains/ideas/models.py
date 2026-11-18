@@ -15,6 +15,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     text,
 )
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
@@ -109,9 +110,7 @@ class IdeaBankPolicy(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base
 class IdeaApprovalStage(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base):
     __tablename__ = "idea_approval_stages"
     __table_args__ = (
-        UniqueConstraint(
-            "idea_id", "round_number", "stage_order", name="uq_idea_approval_stage_round_order"
-        ),
+        Index("ix_idea_approval_stages_idea_round_order", "idea_id", "round_number", "stage_order"),
         Index("ix_idea_approval_stages_tenant_assignee", "tenant_id", "assignee_user_id", "status"),
         Index("ix_idea_approval_stages_tenant_idea", "tenant_id", "idea_id"),
     )
@@ -123,19 +122,79 @@ class IdeaApprovalStage(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, B
     stage_order: Mapped[int] = mapped_column(nullable=False)
     stage_key: Mapped[str] = mapped_column(String(80), nullable=False)
     stage_name: Mapped[str] = mapped_column(String(160), nullable=False)
-    assignee_membership_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=False
+    # One row is one approver's task. Rows sharing ``stage_order`` belong to the same
+    # workflow step: ``completion`` says whether any one or all of them must approve, and
+    # ``sequence`` orders approvers inside an "all in sequence" step (0 for everyone else).
+    # Assignee columns are empty only for a step that was skipped during resolution.
+    sequence: Mapped[int] = mapped_column(nullable=False, default=0)
+    completion: Mapped[str] = mapped_column(String(8), nullable=False, default="all")
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    assignee_membership_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("memberships.id", ondelete="RESTRICT"), nullable=True
     )
-    assignee_user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    assignee_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
     )
-    assignee_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    assignee_email: Mapped[str] = mapped_column(String(320), nullable=False)
+    assignee_name: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    assignee_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
     sla_hours: Mapped[int] = mapped_column(nullable=False, default=48)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="waiting")
     decision_comment: Mapped[str | None] = mapped_column(Text, nullable=True)
     due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     actioned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # Email bookkeeping, so every notice is sent exactly once however often dispatch runs.
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    closure_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Overdue reminders sent for this task, and when; the last one also escalates.
+    reminder_count: Mapped[int] = mapped_column(nullable=False, default=0)
+    last_reminded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
+class IdeaStepConsultation(UUIDPrimaryKeyMixin, TenantOwnedMixin, Base):
+    """Who was asked for comments when a workflow step started. Also grants them the
+    right to comment on the idea."""
+
+    __tablename__ = "idea_step_consultations"
+    __table_args__ = (
+        UniqueConstraint(
+            "idea_id", "round_number", "stage_order", name="uq_idea_step_consultations_step"
+        ),
+    )
+
+    idea_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ideas.id", ondelete="CASCADE"), nullable=False
+    )
+    round_number: Mapped[int] = mapped_column(nullable=False)
+    stage_order: Mapped[int] = mapped_column(nullable=False)
+    stage_name: Mapped[str] = mapped_column(String(160), nullable=False)
+    user_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
+    )
+
+
+class IdeaComment(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base):
+    """Review comments on an idea in approval: advice from consulted colleagues, and the
+    approver's or submitter's replies."""
+
+    __tablename__ = "idea_comments"
+    __table_args__ = (Index("ix_idea_comments_tenant_idea", "tenant_id", "idea_id", "created_at"),)
+
+    idea_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("ideas.id", ondelete="CASCADE"), nullable=False
+    )
+    round_number: Mapped[int] = mapped_column(nullable=False, default=1)
+    author_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False
+    )
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("idea_comments.id", ondelete="CASCADE"), nullable=True
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
 
 
 class ProjectCharter(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base):

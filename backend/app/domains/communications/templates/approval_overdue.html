@@ -1,0 +1,10 @@
+{% extends "base_modern.html" %}
+{% from "_components.html" import details, closing %}
+{% block preheader %}{{ idea_reference }} has been waiting for your decision for {{ overdue_by }}.{% endblock %}
+{% block badge %}{% if final_reminder %}Final reminder{% else %}Reminder{% endif %}{% endblock %}
+{% block title %}An approval is overdue.{% endblock %}
+{% block intro %}Hi {{ recipient_name.split(' ')[0] }}, {{ submitter_name }}'s idea has been waiting at the {{ stage_name }} step for {{ overdue_by }} past its due time.{% if final_reminder %} This is the last reminder; your manager has also been told so they can help unblock it.{% endif %}{% endblock %}
+{% block body %}
+  {{ details([("Reference", idea_reference), ("Idea", idea_title), ("Was due", due), ("Reminder", reminder_number ~ " of 3")]) }}
+  {{ closing("If you are not the right person to decide, ask a Workspace Admin to update the approval route or the HR directory.") }}
+{% endblock %}

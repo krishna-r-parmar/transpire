@@ -1,0 +1,13 @@
+{% extends "base_modern.html" %}
+{% from "_components.html" import details, closing %}
+{% block preheader %}{{ author_name }} commented on {{ idea_reference }}.{% endblock %}
+{% block badge %}{% if is_reply %}New reply{% else %}New comment{% endif %}{% endblock %}
+{% block title %}{{ author_name }} {% if is_reply %}replied{% else %}commented{% endif %}.{% endblock %}
+{% block intro %}Hi {{ recipient_name.split(' ')[0] }}, there is a new {% if is_reply %}reply{% else %}comment{% endif %} on {{ idea_reference }} while it is in approval.{% endblock %}
+{% block body %}
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 22px;">
+    <tr><td style="border-left:3px solid #006fae;padding:4px 0 4px 16px;font-size:15px;line-height:24px;color:#0c2340;white-space:pre-line;">{{ comment }}</td></tr>
+  </table>
+  {{ details([("Reference", idea_reference), ("Idea", idea_title)]) }}
+  {{ closing("Reply in TRANSPIRE so everyone involved sees the conversation.") }}
+{% endblock %}

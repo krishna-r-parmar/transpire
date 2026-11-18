@@ -1,0 +1,16 @@
+Your idea needs a few changes.
+
+Hi {{ recipient_name.split(' ')[0] }}, {{ approver_name }} reviewed your idea at the {{ stage_name }} step and asked for changes before it can continue.
+
+"{{ comment }}"
+
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
+
+Reference: {{ idea_reference }}
+Idea: {{ idea_title }}
+Step: {{ stage_name }}
+
+Update the idea and resubmit it. It will go through approval again.
+
+{% include "_footer.txt" %}

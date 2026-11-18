@@ -1,0 +1,10 @@
+{% extends "base_modern.html" %}
+{% from "_components.html" import details, closing %}
+{% block preheader %}Your access to {{ tenant_name }} is now {{ new_role }}.{% endblock %}
+{% block badge %}Access changed{% endblock %}
+{% block title %}Your access has changed.{% endblock %}
+{% block intro %}Hi {{ recipient_name.split(' ')[0] }}, {{ changed_by }} changed your role in {{ tenant_name }} on TRANSPIRE.{% endblock %}
+{% block body %}
+  {{ details([("Workspace", tenant_name), ("Previous role", previous_role), ("New role", new_role), ("Changed by", changed_by), ("What this means", role_meaning)]) }}
+  {{ closing("If you did not expect this change, contact a Workspace Owner in your organisation.") }}
+{% endblock %}

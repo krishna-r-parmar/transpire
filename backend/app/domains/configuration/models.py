@@ -104,3 +104,20 @@ class WorkflowVersion(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Bas
     )
     stages: Mapped[list[dict[str, object]]] = mapped_column(JSONB, nullable=False, default=list)
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ApproverGroup(UUIDPrimaryKeyMixin, TenantOwnedMixin, TimestampMixin, Base):
+    """A user group (shown as "User groups"). Approval groups are what fixed workflow
+    steps route to (e.g. "Finance Head"); notification groups are only asked for comments.
+    Editing a group re-routes future and pending work without a new workflow version."""
+
+    __tablename__ = "approver_groups"
+    __table_args__ = (UniqueConstraint("tenant_id", "name", name="uq_approver_groups_tenant_name"),)
+
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str] = mapped_column(String(500), nullable=False, default="")
+    member_membership_ids: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
+    round_robin_cursor: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # "approval": can approve fixed steps and be notified. "notification": comments only.
+    purpose: Mapped[str] = mapped_column(String(16), nullable=False, default="approval")

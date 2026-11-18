@@ -258,11 +258,12 @@ async def update_tenant_member_role(
     command: MemberRoleCommand,
     identity: TenantAdminIdentity,
     tenant: TenantDependency,
+    settings: SettingsDependency,
     session: SessionDependency,
 ) -> TenantMemberSummary:
     try:
         return await change_member_role(
-            tenant.tenant_id, membership_id, command.role_key, identity, session
+            tenant.tenant_id, membership_id, command.role_key, identity, session, settings
         )
     except RoleNotFoundError as error:
         raise HTTPException(

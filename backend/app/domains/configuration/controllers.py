@@ -2,12 +2,13 @@ import re
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import update
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.tenant_context import apply_tenant_to_transaction
 from app.domains.audit.controllers import record_audit_event
 from app.domains.configuration.models import (
+    ApproverGroup,
     ConfigurationItem,
     WorkflowDefinition,
     WorkflowVersion,
@@ -15,10 +16,17 @@ from app.domains.configuration.models import (
 )
 from app.domains.configuration.repositories import SQLAlchemyConfigurationRepository
 from app.domains.configuration.schemas import (
+    ApproverGroupCommand,
+    ApproverGroupMember,
+    ApproverGroupSummary,
     ConfigurationItemCreate,
     ConfigurationItemSummary,
     ConfigurationItemUpdate,
+    PreviewApprover,
+    PreviewStep,
     WorkflowAssigneeSummary,
+    WorkflowPreviewCommand,
+    WorkflowPreviewResult,
     WorkflowStage,
     WorkflowSummary,
     WorkflowVersionCreate,
@@ -42,6 +50,11 @@ DEMO_STAGES = [
         "key": "demo_approval",
         "name": "Demo Approval",
         "approver_role": "tenant_admin",
+        "source": "group",
+        "group_id": None,
+        "mode": "any",
+        "on_unresolved": "fallback_admin",
+        "skip_if_same_as_previous": False,
         "sla_hours": 48,
         "required": True,
     }
@@ -303,10 +316,17 @@ async def list_workflows(tenant_id: uuid.UUID, session: AsyncSession) -> list[Wo
 
 
 async def list_workflow_assignees(
-    tenant_id: uuid.UUID, session: AsyncSession
+    tenant_id: uuid.UUID, session: AsyncSession, query: str | None = None, limit: int = 20
 ) -> list[WorkflowAssigneeSummary]:
+    """People who can approve. With ``query``, a name or email search capped at ``limit``."""
+    term = None if query is None else query.strip()
+    if term is not None and len(term) < 2:
+        return []
     async with session.begin():
         await apply_tenant_to_transaction(session, tenant_id)
+        records = await repository.list_workflow_assignees(
+            session, tenant_id, search=term, limit=limit if term is not None else None
+        )
         return [
             WorkflowAssigneeSummary(
                 membership_id=record.membership.id,
@@ -314,8 +334,17 @@ async def list_workflow_assignees(
                 email=record.user.email,
                 status=record.status,
             )
-            for record in await repository.list_workflow_assignees(session, tenant_id)
+            for record in records
         ]
+
+
+async def _groups_by_id(session: AsyncSession, tenant_id: uuid.UUID) -> dict[str, ApproverGroup]:
+    return {
+        str(group.id): group
+        for group in (
+            await session.scalars(select(ApproverGroup).where(ApproverGroup.tenant_id == tenant_id))
+        ).all()
+    }
 
 
 async def _resolve_workflow_stages(
@@ -327,22 +356,39 @@ async def _resolve_workflow_stages(
         record.membership.id: record
         for record in await repository.list_workflow_assignees(session, tenant_id)
     }
+    groups = await _groups_by_id(session, tenant_id)
     resolved: list[WorkflowStage] = []
     for stage in command.stages:
-        assignee = assignees.get(stage.assignee_membership_id)
-        if assignee is None:
-            raise ConfigurationConflictError(
-                f"Select an active member or pending invitee for {stage.name}."
-            )
-        resolved.append(
-            WorkflowStage(
-                **stage.model_dump(),
-                approver_role="assigned_member",
-                assignee_name=assignee.user.display_name,
-                assignee_email=assignee.user.email,
-                assignee_status=assignee.status,
-            )
-        )
+        extra: dict[str, object] = {}
+        if stage.source == "person":
+            assignee = assignees.get(stage.assignee_membership_id)
+            if assignee is None:
+                raise ConfigurationConflictError(
+                    f"Select an active member or pending invitee for {stage.name}."
+                )
+            extra = {
+                "assignee_name": assignee.user.display_name,
+                "assignee_email": assignee.user.email,
+                "assignee_status": assignee.status,
+            }
+        if stage.source == "group":
+            group = groups.get(str(stage.group_id))
+            if group is None or not group.is_active or group.purpose != "approval":
+                raise ConfigurationConflictError(f"{stage.name}: choose an active approval group.")
+            extra["group_name"] = group.name
+        if stage.on_unresolved == "fallback_group":
+            fallback = groups.get(str(stage.fallback_group_id))
+            if fallback is None or not fallback.is_active or fallback.purpose != "approval":
+                raise ConfigurationConflictError(
+                    f"{stage.name}: choose an active approval group as the fallback."
+                )
+            extra["fallback_group_name"] = fallback.name
+        if stage.notify_kind == "group":
+            notify = groups.get(str(stage.notify_group_id))
+            if notify is None or not notify.is_active:
+                raise ConfigurationConflictError(f"{stage.name}: choose an active group to notify.")
+            extra["notify_group_name"] = notify.name
+        resolved.append(WorkflowStage(**stage.model_dump(), approver_role=stage.source, **extra))
     return resolved
 
 
@@ -408,12 +454,34 @@ async def publish_workflow_version(
             record.membership.id
             for record in await repository.list_workflow_assignees(session, tenant_id)
         }
+        groups = await _groups_by_id(session, tenant_id)
         for stage in version.stages:
-            assignee_id = stage.get("assignee_membership_id")
-            if not assignee_id or uuid.UUID(str(assignee_id)) not in assignable_ids:
-                raise ConfigurationConflictError(
-                    "Every stage must have an active member or pending invitee before publishing."
-                )
+            name = stage.get("name", "A stage")
+            source = stage.get("source") or "person"
+            if source == "person":
+                assignee_id = stage.get("assignee_membership_id")
+                if not assignee_id or uuid.UUID(str(assignee_id)) not in assignable_ids:
+                    raise ConfigurationConflictError(
+                        f"{name}: the assigned person must be an active member or pending invitee."
+                    )
+            if source == "group":
+                group = groups.get(str(stage.get("group_id")))
+                members = {str(value) for value in group.member_membership_ids} if group else set()
+                if (
+                    not group
+                    or not group.is_active
+                    or group.purpose != "approval"
+                    or not members & {str(value) for value in assignable_ids}
+                ):
+                    raise ConfigurationConflictError(
+                        f"{name}: the approver group needs at least one person who can approve."
+                    )
+            if stage.get("on_unresolved") == "fallback_group":
+                fallback = groups.get(str(stage.get("fallback_group_id")))
+                if not fallback or not fallback.is_active:
+                    raise ConfigurationConflictError(
+                        f"{name}: the fallback approver group is missing or inactive."
+                    )
         await session.execute(
             update(WorkflowVersion)
             .where(
@@ -437,4 +505,225 @@ async def publish_workflow_version(
             entity_reference=f"{workflow.name if workflow else 'Approval workflow'} v{version.version}",
             summary=f"Published approval workflow version {version.version}.",
             details={"workflow_id": str(workflow_id), "stage_count": len(version.stages)},
+        )
+
+
+async def _group_summary(
+    session: AsyncSession,
+    tenant_id: uuid.UUID,
+    group: ApproverGroup,
+    assignees: dict[uuid.UUID, object],
+    published_group_ids: set[str],
+) -> ApproverGroupSummary:
+    members: list[ApproverGroupMember] = []
+    for raw_id in group.member_membership_ids:
+        record = assignees.get(uuid.UUID(str(raw_id)))
+        if record is None:
+            members.append(
+                ApproverGroupMember(
+                    membership_id=uuid.UUID(str(raw_id)),
+                    display_name="No longer able to approve",
+                    email="",
+                    status="unavailable",
+                )
+            )
+            continue
+        members.append(
+            ApproverGroupMember(
+                membership_id=record.membership.id,
+                display_name=record.user.display_name,
+                email=record.user.email,
+                status=record.status,
+            )
+        )
+    return ApproverGroupSummary(
+        id=group.id,
+        name=group.name,
+        purpose=group.purpose,  # type: ignore[arg-type]
+        description=group.description,
+        is_active=group.is_active,
+        members=members,
+        used_by_published_workflow=str(group.id) in published_group_ids,
+    )
+
+
+async def _published_group_ids(session: AsyncSession, tenant_id: uuid.UUID) -> set[str]:
+    ids: set[str] = set()
+    for stages in (
+        await session.scalars(
+            select(WorkflowVersion.stages).where(
+                WorkflowVersion.tenant_id == tenant_id,
+                WorkflowVersion.status == WorkflowVersionStatus.PUBLISHED,
+            )
+        )
+    ).all():
+        for stage in stages:
+            for key in ("group_id", "fallback_group_id", "notify_group_id"):
+                if stage.get(key):
+                    ids.add(str(stage[key]))
+    return ids
+
+
+async def _published_approver_group_ids(session: AsyncSession, tenant_id: uuid.UUID) -> set[str]:
+    ids: set[str] = set()
+    for stages in (
+        await session.scalars(
+            select(WorkflowVersion.stages).where(
+                WorkflowVersion.tenant_id == tenant_id,
+                WorkflowVersion.status == WorkflowVersionStatus.PUBLISHED,
+            )
+        )
+    ).all():
+        for stage in stages:
+            for key in ("group_id", "fallback_group_id"):
+                if stage.get(key):
+                    ids.add(str(stage[key]))
+    return ids
+
+
+async def list_approver_groups(
+    tenant_id: uuid.UUID, session: AsyncSession
+) -> list[ApproverGroupSummary]:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        assignees = {
+            record.membership.id: record
+            for record in await repository.list_workflow_assignees(session, tenant_id)
+        }
+        published = await _published_group_ids(session, tenant_id)
+        groups = (
+            await session.scalars(
+                select(ApproverGroup)
+                .where(ApproverGroup.tenant_id == tenant_id)
+                .order_by(ApproverGroup.name)
+            )
+        ).all()
+        return [
+            await _group_summary(session, tenant_id, group, assignees, published)
+            for group in groups
+        ]
+
+
+async def save_approver_group(
+    tenant_id: uuid.UUID,
+    actor_user_id: uuid.UUID,
+    group_id: uuid.UUID | None,
+    command: ApproverGroupCommand,
+    session: AsyncSession,
+) -> ApproverGroupSummary:
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        assignees = {
+            record.membership.id: record
+            for record in await repository.list_workflow_assignees(session, tenant_id)
+        }
+        unavailable = [
+            member for member in command.member_membership_ids if member not in assignees
+        ]
+        if unavailable:
+            raise ConfigurationConflictError(
+                "Approver groups can include only active or invited people who can approve "
+                "(not Viewers)."
+            )
+        published = await _published_group_ids(session, tenant_id)
+        if group_id is None:
+            group = ApproverGroup(tenant_id=tenant_id, round_robin_cursor=0)
+            session.add(group)
+            event = "approver_group.created"
+        else:
+            group = await session.scalar(
+                select(ApproverGroup)
+                .where(ApproverGroup.tenant_id == tenant_id, ApproverGroup.id == group_id)
+                .with_for_update()
+            )
+            if group is None:
+                raise ConfigurationNotFoundError
+            if not command.is_active and str(group.id) in published:
+                raise ConfigurationConflictError(
+                    "This group is used by the published approval workflow. "
+                    "Publish a version without it before deactivating it."
+                )
+            if (
+                group.purpose == "approval"
+                and command.purpose == "notification"
+                and str(group.id) in await _published_approver_group_ids(session, tenant_id)
+            ):
+                raise ConfigurationConflictError(
+                    "This group approves a step in the published workflow, so it cannot become "
+                    "notification-only. Publish a version without it first."
+                )
+            event = "approver_group.updated"
+        before = [str(value) for value in group.member_membership_ids or []]
+        group.name = command.name.strip()
+        group.purpose = command.purpose
+        group.description = command.description.strip()
+        group.member_membership_ids = [str(member) for member in command.member_membership_ids]
+        group.is_active = command.is_active
+        await session.flush()
+        record_audit_event(
+            session,
+            tenant_id=tenant_id,
+            actor_user_id=actor_user_id,
+            subject_user_id=actor_user_id,
+            event_type=event,
+            entity_type="approver_group",
+            entity_id=group.id,
+            entity_reference=group.name,
+            summary=f"{'Created' if group_id is None else 'Updated'} approver group {group.name}.",
+            details={"members_before": before, "members_after": group.member_membership_ids},
+        )
+        return await _group_summary(session, tenant_id, group, assignees, published)
+
+
+async def preview_workflow(
+    tenant_id: uuid.UUID, command: WorkflowPreviewCommand, session: AsyncSession
+) -> WorkflowPreviewResult:
+    """Show who would approve each step for one employee, without changing anything."""
+    from app.domains.directory.models import DirectoryEmployee
+    from app.domains.ideas.approval_routing import MODE_LABELS, resolve_step
+
+    async with session.begin():
+        await apply_tenant_to_transaction(session, tenant_id)
+        subject = await session.scalar(
+            select(DirectoryEmployee).where(
+                DirectoryEmployee.tenant_id == tenant_id,
+                DirectoryEmployee.employee_id == command.employee_id.strip(),
+            )
+        )
+        if subject is None:
+            raise ConfigurationNotFoundError
+        submitter_id = subject.user_id or uuid.uuid4()
+        steps: list[PreviewStep] = []
+        previous: set[uuid.UUID] = set()
+        for stage in command.stages:
+            payload = stage.model_dump(mode="json")
+            resolved = await resolve_step(
+                session,
+                tenant_id,
+                payload,
+                submitter_id,
+                previous,
+                activate=False,
+                subject=subject,
+                subject_loaded=True,
+            )
+            if not resolved.skipped:
+                previous = {approver.user_id for approver in resolved.approvers}
+            steps.append(
+                PreviewStep(
+                    key=stage.key,
+                    name=stage.name,
+                    outcome="skipped" if resolved.skipped else "assigned",
+                    mode=MODE_LABELS.get(stage.mode, stage.mode)
+                    if stage.source == "group"
+                    else "Single approver",
+                    approvers=[
+                        PreviewApprover(display_name=approver.name, email=approver.email)
+                        for approver in resolved.approvers
+                    ],
+                    note=resolved.note,
+                )
+            )
+        return WorkflowPreviewResult(
+            employee_name=subject.display_name, employee_email=subject.email, steps=steps
         )

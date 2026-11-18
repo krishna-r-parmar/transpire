@@ -168,3 +168,30 @@ Render safe sample previews with:
 ```
 
 Previews are written to `/tmp/transpire-email-previews`. The renderer uses strict variables and HTML autoescaping so missing template data fails early and user-provided values cannot inject markup.
+
+
+## Scheduled jobs
+
+Run one job for every workspace from cron, e.g. every 15 minutes:
+
+```bash
+.venv/bin/python scripts/run_scheduled_jobs.py
+```
+
+For each active workspace it fetches the HR report from that workspace's SFTP server (once
+per `--fetch-every-hours`, default 24), applies files dropped into
+`HR_DIRECTORY_INBOX_DIR/<shortname>/`, and sends overdue approval reminders (one when a task
+passes its due time, then every 24 hours, three at most; the third also escalates to the
+approver's reporting manager from the HR directory, or to the Workspace Admins). Every step
+is idempotent and one failing workspace never blocks the others. Administrators can also run
+a fetch at any time with **Fetch now** under Administration → HR directory.
+
+### SFTP sources
+
+Each workspace stores its own server address, port, path and credentials (encrypted with
+`OUTBOX_ENCRYPTION_KEY`). A Workspace Owner must check and trust the server's key before
+anything is fetched; a changed key stops all fetches and no credentials are sent. Loopback,
+link-local (cloud metadata), multicast and reserved addresses are always refused; private
+addresses only when their range is listed in `HR_SFTP_ALLOWED_NETWORKS` (comma-separated
+CIDRs, for servers reached over a VPN). `HR_SFTP_TIMEOUT_SECONDS` defaults to 20. The
+customer must allow connections from this server's outbound IP address.

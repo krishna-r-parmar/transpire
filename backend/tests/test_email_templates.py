@@ -1,4 +1,5 @@
 import uuid
+from email.message import EmailMessage as MIMEEmailMessage
 
 import certifi
 import pytest
@@ -6,6 +7,9 @@ import pytest
 from app.core.config import Settings
 from app.domains.communications.schemas import EmailMessage
 from app.domains.communications.services import (
+    FOOTER_IMAGE,
+    INLINE_IMAGES,
+    LOGO_IMAGE,
     ConsoleEmailTransport,
     EmailTemplateRenderer,
     SMTPEmailTransport,
@@ -114,7 +118,8 @@ def test_transactional_template_renders_html_and_text(
 
     assert "Ideate. Transform. Inspire." in rendered.html_body
     assert "Ideate. Transform. Inspire." in rendered.text_body
-    assert 'src="http://localhost:3000/brand/transpire-logo.png"' in rendered.html_body
+    assert f'src="cid:{LOGO_IMAGE.content_id}"' in rendered.html_body
+    assert f"cid:{FOOTER_IMAGE.content_id}" in rendered.html_body
     assert str(template_data["action_url"]) in rendered.html_body
     assert str(template_data["action_url"]) in rendered.text_body
     assert "<script>" not in rendered.html_body
@@ -188,6 +193,73 @@ async def test_smtp_transport_uses_certifi_ca_bundle(
     assert captured_options["password"] is None
     assert captured_options["start_tls"] is True
     assert captured_options["use_tls"] is False
+
+
+def test_preview_renderer_links_brand_images_from_public_url() -> None:
+    renderer = EmailTemplateRenderer(
+        public_app_url="https://transpire.example.com/", inline_images=False
+    )
+    rendered = renderer.render(
+        EmailMessage(
+            tenant_id=uuid.uuid4(),
+            recipient="avery@example.com",
+            template_key="password_reset",
+            subject="Reset your TRANSPIRE password",
+            template_data=TEMPLATE_CASES["password_reset"],
+        )
+    )
+
+    assert 'src="https://transpire.example.com/brand/transpire-logo.png"' in rendered.html_body
+    assert "https://transpire.example.com/brand/transpire-email-footer-connected-ideas.jpg" in (
+        rendered.html_body
+    )
+    assert "cid:" not in rendered.html_body
+
+
+def test_inline_brand_images_are_bundled_with_the_backend() -> None:
+    for image in INLINE_IMAGES:
+        assert image.path.is_file(), image.path
+        # Keep each embedded image small: it is sent with every email.
+        assert image.path.stat().st_size < 100_000
+
+
+@pytest.mark.asyncio
+async def test_smtp_transport_embeds_brand_images_as_related_parts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sent: list[MIMEEmailMessage] = []
+
+    async def fake_send(message: MIMEEmailMessage, **_: object) -> None:
+        sent.append(message)
+
+    monkeypatch.setattr("app.domains.communications.services.aiosmtplib.send", fake_send)
+    settings = Settings(EMAIL_BACKEND="smtp", SMTP_HOST="smtp.example.com", SMTP_PORT=25)
+    rendered = EmailTemplateRenderer().render(
+        EmailMessage(
+            tenant_id=uuid.uuid4(),
+            recipient="avery@example.com",
+            template_key="password_reset",
+            subject="Reset your TRANSPIRE password",
+            template_data=TEMPLATE_CASES["password_reset"],
+        )
+    )
+
+    await SMTPEmailTransport(settings).send(rendered)
+
+    (mime,) = sent
+    assert mime.get_content_type() == "multipart/alternative"
+    text_part, related = mime.iter_parts()
+    assert text_part.get_content_type() == "text/plain"
+    assert related.get_content_type() == "multipart/related"
+    html_part, *images = related.iter_parts()
+    assert html_part.get_content_type() == "text/html"
+    assert {image["Content-ID"] for image in images} == {
+        f"<{LOGO_IMAGE.content_id}>",
+        f"<{FOOTER_IMAGE.content_id}>",
+    }
+    assert {image.get_content_type() for image in images} == {"image/png", "image/jpeg"}
+    assert all(image.get_content_disposition() == "inline" for image in images)
+    assert images[0].get_content() == LOGO_IMAGE.path.read_bytes()
 
 
 def test_check_in_reminder_puts_actions_first_and_greets_by_first_name() -> None:

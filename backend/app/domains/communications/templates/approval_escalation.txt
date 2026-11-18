@@ -1,0 +1,16 @@
+An approval is stuck.
+
+Hi {{ recipient_name.split(' ')[0] }}, you are being told as {{ approver_name }}'s {{ relation }}. Their decision on {{ idea_reference }} is {{ overdue_by }} overdue and three reminders have gone unanswered.
+
+{{ action_label }}: {{ action_url }}
+{% if secondary_url is defined %}{{ secondary_label }}: {{ secondary_url }}{% endif %}
+
+Reference: {{ idea_reference }}
+Idea: {{ idea_title }}
+Waiting on: {{ approver_name }}
+Step: {{ stage_name }}
+Was due: {{ due }}
+
+A quick word with them usually unblocks it. If they are unavailable, a Workspace Admin can update the approval route.
+
+{% include "_footer.txt" %}

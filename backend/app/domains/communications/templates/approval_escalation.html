@@ -1,0 +1,10 @@
+{% extends "base_modern.html" %}
+{% from "_components.html" import details, closing %}
+{% block preheader %}{{ idea_reference }} has waited {{ overdue_by }} for {{ approver_name }}.{% endblock %}
+{% block badge %}Escalation{% endblock %}
+{% block title %}An approval is stuck.{% endblock %}
+{% block intro %}Hi {{ recipient_name.split(' ')[0] }}, you are being told as {{ approver_name }}'s {{ relation }}. Their decision on {{ idea_reference }} is {{ overdue_by }} overdue and three reminders have gone unanswered.{% endblock %}
+{% block body %}
+  {{ details([("Reference", idea_reference), ("Idea", idea_title), ("Waiting on", approver_name), ("Step", stage_name), ("Was due", due)]) }}
+  {{ closing("A quick word with them usually unblocks it. If they are unavailable, a Workspace Admin can update the approval route.") }}
+{% endblock %}

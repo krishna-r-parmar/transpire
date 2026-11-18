@@ -13,6 +13,19 @@ class ProfileSettings(BaseModel):
     ] = "Asia/Kolkata"
 
 
+TourId = Literal["platform", "submit_idea"]
+
+
+class TourProgress(BaseModel):
+    """Highest version of each guided tour the person has finished or skipped."""
+
+    seen: dict[str, int] = Field(default_factory=dict)
+
+
+class TourSeenCommand(BaseModel):
+    version: int = Field(ge=1, le=1000)
+
+
 class ProfileUpdateCommand(BaseModel):
     display_name: str = Field(min_length=2, max_length=200)
     settings: ProfileSettings
