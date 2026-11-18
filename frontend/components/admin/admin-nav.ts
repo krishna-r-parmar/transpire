@@ -1,8 +1,8 @@
-import { Building2, Eye, FileClock, GitBranch, KeyRound, Layers3, MapPin, Network, Users, Workflow, type LucideIcon } from "lucide-react";
+import { Building2, Eye, FileClock, FolderSync, GitBranch, KeyRound, Layers3, MapPin, Network, Users, UsersRound, Workflow, type LucideIcon } from "lucide-react";
 import type { SessionIdentity } from "@/lib/api";
 import { isWorkspaceAdmin, isWorkspaceOwner } from "@/lib/roles";
 
-export type AdminRoute = "sites" | "departments" | "categories" | "process_areas" | "workflow" | "idea_bank_policy" | "people" | "sign_in" | "audit_log" | "tenants";
+export type AdminRoute = "sites" | "departments" | "categories" | "process_areas" | "workflow" | "approver_groups" | "idea_bank_policy" | "people" | "hr_directory" | "sign_in" | "audit_log" | "tenants";
 
 /** `ownerOnly` pages are limited to Workspace Owners (sign-in and security). */
 export type AdminPage = { route: AdminRoute; href: string; label: string; Icon: LucideIcon; ownerOnly?: boolean };
@@ -20,10 +20,12 @@ export const adminGroups: AdminGroup[] = [
   ] },
   { label: "Governance", pages: [
     { route: "workflow", href: "/admin/approval-workflow", label: "Approval workflow", Icon: GitBranch },
+    { route: "approver_groups", href: "/admin/user-groups", label: "User groups", Icon: UsersRound },
     { route: "idea_bank_policy", href: "/admin/idea-bank-visibility", label: "Idea Bank visibility", Icon: Eye },
   ] },
   { label: "Access", pages: [
     { route: "people", href: "/admin/people", label: "People", Icon: Users },
+    { route: "hr_directory", href: "/admin/hr-directory", label: "HR directory", Icon: FolderSync },
     { route: "sign_in", href: "/admin/sign-in", label: "Microsoft sign-in", Icon: KeyRound, ownerOnly: true },
     { route: "audit_log", href: "/admin/audit-log", label: "Audit log", Icon: FileClock },
   ] },

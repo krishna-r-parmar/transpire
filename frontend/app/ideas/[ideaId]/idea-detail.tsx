@@ -5,6 +5,7 @@ import { TenantLink as Link } from "@/components/app/tenant-link";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DismissibleNotice } from "@/components/ui/dismissible-notice";
 import { IdeaStatusPill } from "@/components/ui/idea-status";
 import { SearchableSelectField } from "@/components/ui/searchable-select-field";
@@ -14,8 +15,9 @@ import { apiRequest } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
 import { IdeaJourney } from "@/components/ui/idea-journey";
 import styles from "./idea-detail.module.css";
+import { ReviewComments } from "./review-comments";
 
-type ApprovalStage = { id: string; round_number: number; stage_order: number; stage_key: string; stage_name: string; assignee_name: string; assignee_email: string; sla_hours: number; status: string; decision_comment: string | null; due_at: string | null; actioned_at: string | null; is_actionable: boolean };
+type ApprovalStage = { id: string; round_number: number; stage_order: number; stage_key: string; stage_name: string; assignee_name: string | null; assignee_email: string | null; resolution_note?: string | null; sla_hours: number; status: string; decision_comment: string | null; due_at: string | null; actioned_at: string | null; is_actionable: boolean };
 type ActionDraft = { action: string; plan_start: string; plan_end: string; actual_start: string; actual_end: string; owner: string; status: string; phase: number | null };
 type MonthDraft = { month: string; ftm_plan: string; ftm_actual: string; line_of_sight: string; kpi_actual: string; status: string; finance_approved?: boolean };
 type Charter = { id: string; sponsor: string; leader: string; department_id: string | null; site_id: string | null; start_date: string | null; target_completion_date: string | null; team_members: string[]; team_membership_ids: string[]; in_scope: string; out_of_scope: string; objective: string; benefit_type: string; kpi_name: string; budget_approved: string | null; impact_areas: string[]; belt_level: string | null; action_items: ActionDraft[]; monthly_tracking: MonthDraft[]; status: string; updated_at: string; submitted_at: string | null; team_invitations_queued?: number; team_invitations_skipped?: number };
@@ -47,6 +49,8 @@ export function IdeaDetail({ ideaId }: { ideaId: string }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [commentsToConfirm, setCommentsToConfirm] = useState(0);
+  const [commentsKey, setCommentsKey] = useState(0);
 
   const loadIdea = useCallback(async () => {
     setError("");
@@ -71,14 +75,20 @@ export function IdeaDetail({ ideaId }: { ideaId: string }) {
   const visibleDepartments = useMemo(() => catalog.departments.filter((department) => !charter.site_id || department.applies_to_all_sites || department.site_ids.includes(charter.site_id)), [catalog.departments, charter.site_id]);
   const actionable = idea?.approval_stages.find((stage) => stage.is_actionable) ?? null;
 
-  const actOnApproval = async () => {
+  const actOnApproval = async (acknowledgeComments = false) => {
     if (!idea || !actionable || !decision) return;
     setBusy("approval"); setError("");
     try {
-      const response = await apiRequest(`/ideas/${idea.id}/approvals/${actionable.id}`, { method: "POST", body: JSON.stringify({ decision, comment }) });
-      const body = await response.json().catch(() => null) as Idea | { detail?: string } | null;
-      if (!response.ok) throw new Error((body as { detail?: string } | null)?.detail ?? "The approval decision could not be saved.");
-      const next = body as Idea; setIdea(next); setCharter(toDraft(next)); setDecision(""); setComment(""); setNotice(decision === "approve" ? "Approval recorded. The idea has moved to its next stage." : "The decision and reason have been recorded.");
+      const response = await apiRequest(`/ideas/${idea.id}/approvals/${actionable.id}`, { method: "POST", body: JSON.stringify({ decision, comment, acknowledge_comments: acknowledgeComments }) });
+      const body = await response.json().catch(() => null) as Idea | { detail?: string | { code?: string; count?: number; message?: string } } | null;
+      const detail = (body as { detail?: unknown } | null)?.detail;
+      if (response.status === 409 && typeof detail === "object" && detail && (detail as { code?: string }).code === "comments_need_review") {
+        setCommentsToConfirm((detail as { count?: number }).count ?? 1);
+        setCommentsKey((value) => value + 1);
+        return;
+      }
+      if (!response.ok) throw new Error(typeof detail === "string" ? detail : "The approval decision could not be saved.");
+      const next = body as Idea; setIdea(next); setCharter(toDraft(next)); setDecision(""); setComment(""); setCommentsToConfirm(0); setCommentsKey((value) => value + 1); setNotice(decision === "approve" ? "Approval recorded. The idea has moved to its next stage." : "The decision and reason have been recorded.");
     } catch (caught) { setError(caught instanceof Error ? caught.message : "The approval decision could not be saved."); }
     finally { setBusy(""); }
   };
@@ -113,7 +123,11 @@ export function IdeaDetail({ ideaId }: { ideaId: string }) {
       <button type="button" data-active={section === "project-charter"} aria-current={section === "project-charter" ? "true" : undefined} onClick={() => setSection("project-charter")}>{idea.charter_available ? <FilePenLine size={16} /> : <LockKeyhole size={16} />}Project charter</button>
     </nav>
     {section === "overview" ? <Overview idea={idea} /> : null}
-    {section === "approval" ? <ApprovalPanel idea={idea} actionable={actionable} decision={decision} comment={comment} busy={busy === "approval"} onDecision={setDecision} onComment={setComment} onSubmit={() => void actOnApproval()} /> : null}
+    {section === "approval" ? <>
+      <ApprovalPanel idea={idea} actionable={actionable} decision={decision} comment={comment} busy={busy === "approval"} onDecision={setDecision} onComment={setComment} onSubmit={() => void actOnApproval()} />
+      <div className={styles.reviewComments}><ReviewComments ideaId={idea.id} refreshKey={commentsKey} /></div>
+    </> : null}
+    <ConfirmDialog open={commentsToConfirm > 0} tone="default" title="Some comments have no reply from you" description={`${commentsToConfirm} review comment${commentsToConfirm === 1 ? " is" : "s are"} still waiting for your reply. Read them below the decision before you continue. You can reply first, or record your decision anyway.`} confirmLabel="Record decision anyway" busy={busy === "approval"} onClose={() => setCommentsToConfirm(0)} onConfirm={() => actOnApproval(true)} />
     {section === "project-charter" ? <CharterPanel
       idea={idea}
       charter={charter}
@@ -147,8 +161,8 @@ function Overview({ idea }: { idea: Idea }) { return <div className={styles.spli
 
 function ApprovalPanel({ idea, actionable, decision, comment, busy, onDecision, onComment, onSubmit }: { idea: Idea; actionable: ApprovalStage | null; decision: string; comment: string; busy: boolean; onDecision: (value: string) => void; onComment: (value: string) => void; onSubmit: () => void }) { return <div className={styles.split}>
   <div>{actionable ? <SectionCard icon={<ShieldCheck size={17} />} title={`Your decision: ${actionable.stage_name}`} description="Review the complete idea above. A correction or rejection requires a clear reason for the submitter." meta={actionable.due_at ? `Due ${formatDate(actionable.due_at)}` : undefined} tinted><div className={styles.decisionPanel}><fieldset className={styles.decisionChoices}><legend className={styles.srOnly}>Decision</legend><button type="button" data-choice="approve" data-selected={decision === "approve"} aria-pressed={decision === "approve"} onClick={() => onDecision("approve")}><CheckCircle2 size={18} /><span><strong>Approve</strong><small>Move to the next stage</small></span></button><button type="button" data-choice="needs_correction" data-selected={decision === "needs_correction"} aria-pressed={decision === "needs_correction"} onClick={() => onDecision("needs_correction")}><RotateCcw size={18} /><span><strong>Needs correction</strong><small>Return with a reason</small></span></button><button type="button" data-choice="reject" data-selected={decision === "reject"} aria-pressed={decision === "reject"} onClick={() => onDecision("reject")}><XCircle size={18} /><span><strong>Reject</strong><small>End this approval journey</small></span></button></fieldset><label>Decision comment {decision === "approve" ? <span>Optional</span> : <span>Required</span>}<textarea value={comment} onChange={(event) => onComment(event.target.value)} rows={4} placeholder={decision === "approve" ? "Record any conditions or guidance for the next stage." : "Explain exactly what should be corrected or why the idea cannot proceed."} /></label><button className={styles.primaryButton} type="button" disabled={!decision || (decision !== "approve" && !comment.trim()) || busy} onClick={onSubmit}>{busy ? "Recording decision" : "Confirm decision"}<Send size={16} /></button></div></SectionCard> : <div className={styles.readOnlyNote}><ShieldCheck size={20} /><div><strong>No decision is assigned to you at this stage.</strong><p>You can still review the route and every recorded comment.</p></div></div>}</div>
-  <div><SectionCard icon={<Route size={17} />} title="Approval route and decision record" description="Fixed when the idea was submitted; later workflow changes don't apply." tinted>
-    <ol className={styles.timeline}>{idea.approval_stages.map((stage) => <li key={stage.id} data-status={stage.status}><span className={styles.timelineIcon} aria-hidden="true">{stage.status === "approve" ? <Check size={16} /> : stage.status === "reject" ? <XCircle size={16} /> : stage.status === "needs_correction" ? <RotateCcw size={15} /> : stage.status === "pending" ? <Clock3 size={16} /> : <Circle size={14} />}</span><div><span className={styles.stageMeta}>Round {stage.round_number} · Stage {stage.stage_order}</span><h3>{stage.stage_name}</h3><StageStatusPill status={stage.status} /><p>Assigned to {stage.assignee_name}<small>{stage.assignee_email}</small></p><small>{stage.actioned_at ? `Decision recorded ${formatDate(stage.actioned_at)}` : stage.due_at ? `Due ${formatDate(stage.due_at)} · ${stage.sla_hours}-hour service target` : `${stage.sla_hours}-hour service target after activation`}</small>{stage.decision_comment ? <blockquote>{stage.decision_comment}</blockquote> : null}</div></li>)}</ol>
+  <div><SectionCard icon={<Route size={17} />} title="Approval route and decision record" description="The route version is fixed at submission. Each step's approver is confirmed when the step starts, using the latest HR directory and user groups." tinted>
+    <ol className={styles.timeline}>{idea.approval_stages.map((stage) => <li key={stage.id} data-status={stage.status}><span className={styles.timelineIcon} aria-hidden="true">{stage.status === "approve" ? <Check size={16} /> : stage.status === "reject" ? <XCircle size={16} /> : stage.status === "needs_correction" ? <RotateCcw size={15} /> : stage.status === "pending" ? <Clock3 size={16} /> : <Circle size={14} />}</span><div><span className={styles.stageMeta}>Round {stage.round_number} · Stage {stage.stage_order}</span><h3>{stage.stage_name}</h3><StageStatusPill status={stage.status} />{stage.assignee_name ? <p>Assigned to {stage.assignee_name}<small>{stage.assignee_email}</small></p> : null}{stage.resolution_note && (stage.status === "skipped" || stage.status === "reassigned" || stage.status === "superseded") ? <small>{stage.resolution_note}</small> : null}<small>{stage.actioned_at ? `Decision recorded ${formatDate(stage.actioned_at)}` : stage.due_at ? `Due ${formatDate(stage.due_at)} · ${stage.sla_hours}-hour service target` : `${stage.sla_hours}-hour service target after activation`}</small>{stage.decision_comment ? <blockquote>{stage.decision_comment}</blockquote> : null}</div></li>)}</ol>
   </SectionCard></div>
 </div>; }
 
@@ -198,7 +212,7 @@ function toDraft(idea: Idea): CharterDraft {
     monthly_tracking: months.map((month) => { const entry = charter.monthly_tracking.find((item) => item.month === month); return entry ? { ...entry, ftm_plan: entry.ftm_plan ?? "", ftm_actual: entry.ftm_actual ?? "", line_of_sight: entry.line_of_sight ?? "", kpi_actual: entry.kpi_actual ?? "" } : { month, ftm_plan: "", ftm_actual: "", line_of_sight: "", kpi_actual: "", status: "" }; }),
   };
 }
-const stageStatuses: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger"; Icon: typeof Circle }> = { waiting: { label: "Upcoming", tone: "neutral", Icon: Circle }, pending: { label: "Pending", tone: "info", Icon: Clock3 }, approve: { label: "Approved", tone: "success", Icon: CheckCircle2 }, needs_correction: { label: "Correction requested", tone: "warning", Icon: RotateCcw }, reject: { label: "Rejected", tone: "danger", Icon: XCircle }, cancelled: { label: "Not reached", tone: "neutral", Icon: Circle } };
+const stageStatuses: Record<string, { label: string; tone: "neutral" | "info" | "success" | "warning" | "danger"; Icon: typeof Circle }> = { waiting: { label: "Upcoming", tone: "neutral", Icon: Circle }, pending: { label: "Pending", tone: "info", Icon: Clock3 }, approve: { label: "Approved", tone: "success", Icon: CheckCircle2 }, needs_correction: { label: "Correction requested", tone: "warning", Icon: RotateCcw }, reject: { label: "Rejected", tone: "danger", Icon: XCircle }, cancelled: { label: "Not reached", tone: "neutral", Icon: Circle }, skipped: { label: "Skipped", tone: "neutral", Icon: Circle }, superseded: { label: "Closed by another approver", tone: "neutral", Icon: Circle }, reassigned: { label: "Reassigned", tone: "neutral", Icon: RotateCcw } };
 function StageStatusPill({ status }: { status: string }) { const entry = stageStatuses[status] ?? { label: status, tone: "neutral" as const, Icon: Circle }; return <StatusPill tone={entry.tone} icon={<entry.Icon size={14} aria-hidden="true" />}>{entry.label}</StatusPill>; }
 /** The single most useful thing to do next on this idea, for whoever is looking at it. */
 function NextStep({ idea, actionable, onOpen }: { idea: Idea; actionable: ApprovalStage | null; onOpen: (section: Section) => void }) {
@@ -236,7 +250,7 @@ function ideaSummary(idea: Idea, actionable: ApprovalStage | null): SummaryItem[
   const current = actionable ?? idea.approval_stages.find((stage) => stage.status === "pending") ?? null;
   const roundStages = current ? idea.approval_stages.filter((stage) => stage.round_number === current.round_number) : [];
   const saving = Number(idea.estimated_annual_saving || 0); const investment = Number(idea.investment_required || 0);
-  const items: SummaryItem[] = [current ? { icon: <CircleDot size={18} />, value: `Stage ${current.stage_order} of ${roundStages.length}`, label: current.stage_name, note: actionable ? "With you" : `With ${current.assignee_name}`, tone: actionable ? "warning" : undefined } : { icon: <CircleDot size={18} />, value: idea.submitted_at ? formatDate(idea.submitted_at) : "Not submitted", label: "Submitted" }];
+  const items: SummaryItem[] = [current ? { icon: <CircleDot size={18} />, value: `Stage ${current.stage_order} of ${new Set(roundStages.map((stage) => stage.stage_order)).size}`, label: current.stage_name, note: actionable ? "With you" : `With ${current.assignee_name ?? "the approver"}`, tone: actionable ? "warning" : undefined } : { icon: <CircleDot size={18} />, value: idea.submitted_at ? formatDate(idea.submitted_at) : "Not submitted", label: "Submitted" }];
   if (idea.estimated_annual_saving) items.push({ icon: <IndianRupee size={18} />, value: compactCurrency(saving), label: "Annual saving", note: idea.cost_avoidance ? `Plus ${currency(idea.cost_avoidance)} cost avoidance` : "Estimated at submission", tone: "success" });
   if (idea.investment_required) items.push(saving > 0 && investment > 0 ? { icon: <Timer size={18} />, value: `${(investment / (saving / 12)).toFixed(1)} mo`, label: "Payback", note: `${currency(idea.investment_required)} investment` } : { icon: <Timer size={18} />, value: compactCurrency(investment), label: "Investment required" });
   if (current?.due_at) items.push({ icon: <CalendarClock size={18} />, value: new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(new Date(current.due_at)), label: "Decision due", note: `${current.sla_hours}-hour service target`, tone: "warning" });

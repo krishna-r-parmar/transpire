@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, Bell, ChevronsUpDown, FileClock, FolderKanban, Home, Inbox, ListFilter, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Settings2, Sun, X } from "lucide-react";
+import { ArrowLeft, Bell, ChevronsUpDown, Compass, FileClock, FolderKanban, Home, Inbox, ListFilter, LogOut, Menu, Moon, PanelLeftClose, PanelLeftOpen, Pencil, Plus, Settings2, Sun, X } from "lucide-react";
 import Image from "next/image";
 import { BetaTag } from "@/components/ui/beta-tag";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -9,6 +9,8 @@ import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import { apiRequest, type SessionIdentity } from "@/lib/api";
 import { adminHome, isAdminRoute, visibleAdminGroups, type AdminRoute } from "@/components/admin/admin-nav";
 import { canContribute, isWorkspaceAdmin } from "@/lib/roles";
+import { GuidedTour, startTour, useTour } from "@/components/ui/guided-tour";
+import { platformTourSteps, PLATFORM_TOUR_VERSION } from "./platform-tour";
 import { useApprovalCount } from "./use-approval-count";
 import { ProfileAvatar } from "./profile-avatar";
 import { setTheme, useTheme } from "@/lib/theme";
@@ -34,6 +36,8 @@ export function AppSidebar({ session, active }: { session: SessionIdentity; acti
   const closeButton = useRef<HTMLButtonElement>(null);
   const adminMode = isAdminRoute(active);
   const adminHref = adminHome(session);
+  // The submit form runs its own tour, so the platform tour never opens on top of it.
+  const tour = useTour("platform", PLATFORM_TOUR_VERSION, !adminMode && active !== "submit");
 
   useEffect(() => {
     if (!drawerOpen) return;
@@ -85,22 +89,23 @@ export function AppSidebar({ session, active }: { session: SessionIdentity; acti
           </NavGroup>)}
         </nav>
       </> : <>
-        {canContribute(session.roles) ? <Link className={styles.submit} href="/ideas/new/v2" data-active={active === "submit"} title="Submit an idea"><Plus size={18} aria-hidden="true" /><span>Submit an idea</span></Link> : null}
+        {canContribute(session.roles) ? <Link className={styles.submit} data-tour="nav-submit" href="/ideas/new/v2" data-active={active === "submit"} title="Submit an idea"><Plus size={18} aria-hidden="true" /><span>Submit an idea</span></Link> : null}
         <nav className={styles.nav} aria-label="Primary">
           <NavGroup label="Workspace">
-            <NavItem href="/home" icon={<Home size={18} />} label="Home" active={active === "home"} />
-            <NavItem href="/ideas" icon={<ListFilter size={18} />} label="Idea Bank" active={active === "ideas"} />
-            <NavItem href="/projects" icon={<FolderKanban size={18} />} label="Projects" active={active === "projects"} />
-            <NavItem href="/notifications" icon={<Inbox size={18} />} label="Inbox" active={active === "notifications"} badge={badge} ariaLabel={approvalCount ? `Inbox, ${approvalCount} need your action` : undefined} />
+            <NavItem href="/home" icon={<Home size={18} />} label="Home" tour="nav-home" active={active === "home"} />
+            <NavItem href="/ideas" icon={<ListFilter size={18} />} label="Idea Bank" tour="nav-ideas" active={active === "ideas"} />
+            <NavItem href="/projects" icon={<FolderKanban size={18} />} label="Projects" tour="nav-projects" active={active === "projects"} />
+            <NavItem href="/notifications" icon={<Inbox size={18} />} label="Inbox" tour="nav-inbox" active={active === "notifications"} badge={badge} ariaLabel={approvalCount ? `Inbox, ${approvalCount} need your action` : undefined} />
           </NavGroup>
           {adminHref ? <NavGroup label="Manage">
-            <NavItem href={adminHref} icon={<Settings2 size={18} />} label="Administration" active={false} />
+            <NavItem href={adminHref} icon={<Settings2 size={18} />} label="Administration" tour="nav-admin" active={false} />
           </NavGroup> : null}
         </nav>
       </>}
 
       <AccountMenu session={session} active={active === "profile"} />
     </aside>
+    <GuidedTour open={tour.open} onClose={tour.close} label="TRANSPIRE tour" steps={platformTourSteps({ workspaceName: session.tenant.name, canSubmit: canContribute(session.roles), hasAdministration: Boolean(adminHref) })} />
   </>;
 }
 
@@ -108,8 +113,8 @@ function NavGroup({ label, children }: { label: string; children: ReactNode }) {
   return <div className={styles.group}><p>{label}</p><ul>{children}</ul></div>;
 }
 
-function NavItem({ href, icon, label, active, badge, ariaLabel }: { href: string; icon: ReactNode; label: string; active: boolean; badge?: ReactNode; ariaLabel?: string }) {
-  return <li>
+function NavItem({ href, icon, label, active, badge, ariaLabel, tour }: { href: string; icon: ReactNode; label: string; active: boolean; badge?: ReactNode; ariaLabel?: string; tour?: string }) {
+  return <li data-tour={tour}>
     <Link className={styles.item} href={href} data-active={active} aria-current={active ? "page" : undefined} aria-label={ariaLabel} title={label}>
       <span className={styles.itemIcon} aria-hidden="true">{icon}</span><span className={styles.itemLabel}>{label}</span>{badge}
     </Link>
@@ -156,7 +161,7 @@ function AccountMenu({ session, active }: { session: SessionIdentity; active: bo
   };
 
   return <div className={styles.account} ref={root}>
-    <button ref={trigger} type="button" className={styles.accountTrigger} data-active={active} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((current) => !current)} title={displayName}>
+    <button ref={trigger} type="button" data-tour="account" className={styles.accountTrigger} data-active={active} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((current) => !current)} title={displayName}>
       <ProfileAvatar name={displayName} />
       <span className={styles.accountText}><strong>{displayName}</strong><small>{session.user.email}</small></span>
       <ChevronsUpDown className={styles.accountChevron} size={15} aria-hidden="true" />
@@ -164,6 +169,7 @@ function AccountMenu({ session, active }: { session: SessionIdentity; active: bo
     <div className={styles.menu} role="menu" data-open={open}>
       <Link ref={firstItem} href="/profile" role="menuitem" onClick={() => setOpen(false)}><Pencil size={15} aria-hidden="true" />Edit profile</Link>
       <Link href={isWorkspaceAdmin(session.roles) ? "/admin/audit-log" : "/profile#audit-log"} role="menuitem" onClick={() => setOpen(false)}><FileClock size={15} aria-hidden="true" />{isWorkspaceAdmin(session.roles) ? "Audit log" : "Your activity"}</Link>
+      <button type="button" role="menuitem" onClick={() => { setOpen(false); startTour("platform"); }}><Compass size={15} aria-hidden="true" />Take the tour</button>
       {workspaces.length > 1 ? <div className={styles.workspaces}>
         <span>Switch organisation</span>
         {workspaces.map((workspace) => workspace.id === session.tenant.id

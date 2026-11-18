@@ -1,0 +1,25 @@
+.srOnly { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.error { margin: 0 0 .75rem; color: var(--tp-danger); font-size: var(--tp-text-sm); font-weight: 650; }
+.empty { margin: 0 0 .75rem; color: var(--muted); font-size: var(--tp-text-sm); }
+.thread, .replies { display: grid; gap: .75rem; margin: 0; padding: 0; list-style: none; }
+.thread { margin-bottom: 1rem; }
+.thread > li { display: grid; gap: .5rem; }
+.replies { margin-left: 1.25rem; border-left: 2px solid var(--line); padding-left: .85rem; }
+.comment { display: grid; gap: .35rem; border: 1px solid var(--line); border-radius: .45rem; padding: .7rem .85rem; background: var(--tp-surface); }
+.comment[data-mine="true"] { background: var(--tp-blue-soft); }
+.comment header { display: flex; flex-wrap: wrap; align-items: center; gap: .45rem; }
+.comment header strong { font-size: var(--tp-text-sm); }
+.comment time, .round { color: var(--muted); font-size: var(--tp-text-xs); }
+.comment p { margin: 0; color: var(--ink); font-size: var(--tp-text-sm); line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.replyButton { display: inline-flex; width: fit-content; cursor: pointer; align-items: center; gap: .3rem; margin-left: .25rem; border: 0; padding: .2rem .3rem; background: transparent; color: var(--blue-deep); font: inherit; font-size: var(--tp-text-xs); font-weight: 700; }
+.compose, .replyForm { display: grid; gap: .45rem; }
+.compose label { font-size: var(--tp-control-label); font-weight: 760; }
+.compose textarea, .replyForm textarea { width: 100%; min-height: 4.5rem; resize: vertical; border: 1px solid var(--line); border-radius: .3rem; padding: .6rem .75rem; background: var(--tp-surface); color: var(--ink); font: inherit; font-size: var(--tp-text-sm); }
+.compose textarea:focus, .replyForm textarea:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px oklch(59% .14 242 / .16); }
+.formActions { display: flex; align-items: center; justify-content: flex-end; gap: .5rem; }
+.formActions span { margin-right: auto; color: var(--muted); font-size: var(--tp-text-xs); }
+.send, .ghost { display: inline-flex; min-height: 2.4rem; cursor: pointer; align-items: center; gap: .35rem; border-radius: .25rem; padding: .45rem .85rem; font: inherit; font-size: var(--tp-text-sm); font-weight: 700; }
+.send { border: 1px solid var(--blue); background: var(--blue); color: var(--on-accent); }
+.send:disabled { cursor: not-allowed; opacity: .5; }
+.ghost { border: 1px solid var(--line); background: var(--tp-surface); color: var(--ink); }
+.send:focus-visible, .ghost:focus-visible, .replyButton:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }

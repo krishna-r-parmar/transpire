@@ -79,3 +79,5 @@
 .charterHandoff h2 { margin: 0; font-size: var(--tp-text-lg); }
 .charterHandoff p { margin: .25rem 0 0; color: var(--muted); font-size: var(--tp-text-sm); line-height: 1.5; }
 .charterHandoff a { display: inline-flex; min-height: 2.75rem; align-items: center; gap: .45rem; border-radius: var(--radius-control); padding: .6rem 1.1rem; background: var(--blue); color: var(--on-accent); font-size: var(--tp-text-sm); font-weight: 700; text-decoration: none; }
+
+.reviewComments { margin-top: 1rem; }

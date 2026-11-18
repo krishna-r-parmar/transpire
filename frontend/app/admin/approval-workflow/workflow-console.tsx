@@ -1,128 +1,239 @@
 "use client";
 
-import { Archive, CheckCircle2, FilePenLine, GitBranch, Pencil, Plus, Rocket, Trash2, TriangleAlert } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { Archive, CheckCircle2, FilePenLine, FlaskConical, History, Rocket, Save, Search, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { AdminShell } from "@/components/admin/admin-shell";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DismissibleNotice } from "@/components/ui/dismissible-notice";
-import { SearchableSelectField } from "@/components/ui/searchable-select-field";
-import { SectionCard, StatusPill } from "@/components/ui/workspace";
+import { StatusPill } from "@/components/ui/workspace";
 import { apiRequest } from "@/lib/api";
 import { useAdminSession } from "@/lib/use-admin-session";
 import { useTenantRouter as useRouter } from "@/lib/use-tenant-router";
 import shared from "../admin.module.css";
-import styles from "../configuration.module.css";
-import register from "@/components/admin/admin-register.module.css";
+import { type BuilderStage, type DirectoryEmployee, type GroupOption, type Preview, type Version, type Workflow, fromStored, newStage, stageProblems, toPayload } from "./builder-types";
+import styles from "./builder.module.css";
+import { StepInspector } from "./step-inspector";
+import { WorkflowCanvas } from "./workflow-canvas";
 
-type Stage = { key: string; name: string; approver_role: string; assignee_membership_id: string | null; assignee_name: string | null; assignee_email: string | null; assignee_status: "active" | "pending" | null; sla_hours: number; required: boolean };
-type WorkflowAssignee = { membership_id: string; display_name: string; email: string; status: "active" | "pending" };
-type Version = { id: string; version: number; status: "draft" | "published" | "retired"; stages: Stage[]; published_at: string | null; created_at: string };
-type Workflow = { id: string; key: string; name: string; description: string; is_active: boolean; versions: Version[] };
 type Confirmation = { title: string; description: string; confirmLabel: string; run: () => Promise<void> };
-const emptyStage = (): Stage => ({ key: "", name: "", approver_role: "assigned_member", assignee_membership_id: "", assignee_name: null, assignee_email: null, assignee_status: null, sla_hours: 48, required: true });
-const slugify = (value: string) => value.toLocaleLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+
+async function errorText(response: Response, fallback: string) {
+  const payload = await response.json().catch(() => null) as { detail?: string | Array<{ msg: string }> } | null;
+  return Array.isArray(payload?.detail) ? payload.detail[0]?.msg?.replace(/^Value error, /, "") ?? fallback : payload?.detail ?? fallback;
+}
+
+const signature = (stages: BuilderStage[]) => JSON.stringify(toPayload(stages));
 
 export function WorkflowConsole() {
   const router = useRouter();
   const { session, loading } = useAdminSession();
+  const [workflow, setWorkflow] = useState<Workflow | null>(null);
+  const [groups, setGroups] = useState<GroupOption[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [workflows, setWorkflows] = useState<Workflow[]>([]);
-  const [workflowAssignees, setWorkflowAssignees] = useState<WorkflowAssignee[]>([]);
-  const [stages, setStages] = useState<Stage[]>([emptyStage()]);
-  const [sourceVersion, setSourceVersion] = useState<number | null>(null);
+  const [stages, setStages] = useState<BuilderStage[]>([]);
+  const [base, setBase] = useState<Version | null>(null);
+  const [baseSignature, setBaseSignature] = useState("");
+  const [selected, setSelected] = useState<string | null>(null);
+  const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [busy, setBusy] = useState("");
   const [confirmation, setConfirmation] = useState<Confirmation | null>(null);
-  const flash = (text: string, isError = false) => { setMessage(isError ? "" : text); setError(isError ? text : ""); };
-  const confirmAction = async () => {
-    if (!confirmation) return;
-    await confirmation.run();
-    setConfirmation(null);
-  };
+  const [testOpen, setTestOpen] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [previewSignature, setPreviewSignature] = useState("");
 
-  const loadConfiguration = useCallback(async () => {
+  const flash = (text: string, isError = false) => { setMessage(isError ? "" : text); setError(isError ? text : ""); };
+
+  const openVersion = useCallback((version: Version) => {
+    const next = version.stages.map(fromStored);
+    setStages(next);
+    setBase(version);
+    setBaseSignature(signature(next));
+    setSelected(next[0]?.uid ?? null);
+    setPreview(null);
+  }, []);
+
+  const load = useCallback(async (focusVersionId?: string) => {
     try {
-      const responses = await Promise.all([
+      const [workflowResponse, groupResponse] = await Promise.all([
         apiRequest("/admin/configuration/workflows/contracts"),
-        apiRequest("/admin/configuration/workflows/assignees"),
+        apiRequest("/admin/configuration/approver-groups"),
       ]);
-      if (responses.some((response) => response.status === 401)) return router.replace("/sign-in");
-      if (responses.some((response) => response.status === 403)) return router.replace("/home");
-      if (responses[0].ok) setWorkflows(await responses[0].json() as Workflow[]);
-      if (responses[1].ok) setWorkflowAssignees(await responses[1].json() as WorkflowAssignee[]);
-      if (responses.some((response) => !response.ok)) setError("Some settings could not be loaded. Retry in a moment.");
-    } catch { setError("TRANSPIRE could not reach the configuration service. Check the connection, then retry."); }
-    finally { setLoaded(true); }
-  }, [router]);
+      if (workflowResponse.status === 401) return router.replace("/sign-in");
+      if (workflowResponse.status === 403) return router.replace("/home");
+      if (groupResponse.ok) setGroups(await groupResponse.json() as GroupOption[]);
+      if (!workflowResponse.ok) { setError("The approval workflow could not be loaded."); return; }
+      const loadedWorkflow = (await workflowResponse.json() as Workflow[])[0] ?? null;
+      setWorkflow(loadedWorkflow);
+      if (loadedWorkflow) {
+        const versions = loadedWorkflow.versions;
+        const focus = versions.find((version) => version.id === focusVersionId)
+          ?? versions.find((version) => version.status === "draft")
+          ?? versions.find((version) => version.status === "published")
+          ?? versions[0];
+        if (focus) openVersion(focus);
+      }
+    } catch {
+      setError("TRANSPIRE could not reach the configuration service. Check the connection, then retry.");
+    } finally {
+      setLoaded(true);
+    }
+  }, [openVersion, router]);
 
   useEffect(() => {
     if (!session) return;
-    const timer = window.setTimeout(() => void loadConfiguration(), 0);
+    const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
-  }, [loadConfiguration, session]);
+  }, [load, session]);
 
-  const createVersion = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const workflow = workflows[0];
+  const currentSignature = useMemo(() => signature(stages), [stages]);
+  const dirty = currentSignature !== baseSignature;
+  const problems = stages.flatMap((stage, index) => stageProblems(stage).map((problem) => `Step ${index + 1}: ${problem}`));
+  const selectedIndex = stages.findIndex((stage) => stage.uid === selected);
+  const previewFresh = preview && previewSignature === currentSignature;
+
+  const insert = (index: number, source: "dynamic" | "group") => {
+    const stage = newStage(source);
+    setStages((current) => [...current.slice(0, index), stage, ...current.slice(index)]);
+    setSelected(stage.uid);
+  };
+  const updateStage = (next: BuilderStage) => setStages((current) => current.map((stage) => stage.uid === next.uid ? next : stage));
+  const move = (direction: -1 | 1) => setStages((current) => {
+    const index = current.findIndex((stage) => stage.uid === selected);
+    const target = index + direction;
+    if (index < 0 || target < 0 || target >= current.length) return current;
+    const next = [...current];
+    [next[index], next[target]] = [next[target], next[index]];
+    return next;
+  });
+  const remove = () => setStages((current) => {
+    const index = current.findIndex((stage) => stage.uid === selected);
+    const next = current.filter((stage) => stage.uid !== selected);
+    setSelected(next[Math.max(0, index - 1)]?.uid ?? null);
+    return next;
+  });
+
+  const saveDraft = async () => {
     if (!workflow) return;
-    setBusy("draft"); flash("");
+    setBusy("save"); flash("");
     try {
-      const response = await apiRequest(`/admin/configuration/workflows/${workflow.id}/versions`, { method: "POST", body: JSON.stringify({ stages: stages.map(({ key, name, assignee_membership_id, sla_hours, required }) => ({ key, name, assignee_membership_id, sla_hours, required })) }) });
-      if (!response.ok) { const payload = await response.json().catch(() => null) as { detail?: string | Array<{ msg: string }> } | null; const detail = Array.isArray(payload?.detail) ? payload.detail[0]?.msg : payload?.detail; return flash(detail ?? "Draft version could not be created.", true); }
-      setStages([emptyStage()]); setSourceVersion(null); flash("Draft workflow version created. Review it before publishing."); await loadConfiguration();
+      const response = await apiRequest(`/admin/configuration/workflows/${workflow.id}/versions`, { method: "POST", body: JSON.stringify({ stages: toPayload(stages) }) });
+      if (!response.ok) return flash(await errorText(response, "The draft could not be saved."), true);
+      const created = await response.json() as Version;
+      flash(`Saved as draft version ${created.version}. Test it, then publish when ready.`);
+      await load(created.id);
     } catch {
       flash("Workflow configuration is temporarily unavailable.", true);
     } finally { setBusy(""); }
   };
-  const publishVersion = async (workflow: Workflow, version: Version) => {
-    setBusy(`publish:${version.id}`); flash("");
+
+  const publish = async (version: Version) => {
+    if (!workflow) return;
+    setBusy("publish"); flash("");
     try {
       const response = await apiRequest(`/admin/configuration/workflows/${workflow.id}/versions/${version.id}/publish`, { method: "POST" });
-      if (!response.ok) { const payload = await response.json().catch(() => null) as { detail?: string } | null; return flash(payload?.detail ?? "Version could not be published.", true); }
-      flash(`Version ${version.version} is now the approval contract.`); await loadConfiguration();
+      if (!response.ok) return flash(await errorText(response, "The version could not be published."), true);
+      flash(`Version ${version.version} is live. New ideas follow it; ideas already in review keep their version.`);
+      await load(version.id);
     } catch {
       flash("Workflow publishing is temporarily unavailable.", true);
     } finally { setBusy(""); }
   };
-  const editPublishedVersion = (version: Version) => {
-    setStages(version.stages.map((stage) => ({ ...stage })));
-    setSourceVersion(version.version);
-    window.requestAnimationFrame(() => document.getElementById("workflow-builder")?.scrollIntoView({ behavior: "smooth", block: "start" }));
-    flash(`Version ${version.version} copied into the builder. Saving creates a new draft version.`);
+
+  const runPreview = async (employee: DirectoryEmployee) => {
+    setBusy("preview"); flash("");
+    try {
+      const response = await apiRequest("/admin/configuration/workflows/preview", { method: "POST", body: JSON.stringify({ stages: toPayload(stages), employee_id: employee.employee_id }) });
+      if (!response.ok) return flash(await errorText(response, "The test could not run."), true);
+      setPreview(await response.json() as Preview);
+      setPreviewSignature(currentSignature);
+    } catch {
+      flash("Testing is temporarily unavailable.", true);
+    } finally { setBusy(""); }
   };
 
   if (loading || !session) return <main className={shared.loading}>Loading administration</main>;
 
+  const canPublish = base?.status === "draft" && !dirty && problems.length === 0;
+  const status = !base ? null : dirty ? "unsaved" : base.status;
+
   return (
-    <AdminShell session={session} active="workflow" title="Approval workflow" description="The approval route new ideas follow. Published versions are kept for audit and for ideas already in review.">
-      {message || error ? <div className={register.notices}>
+    <AdminShell session={session} active="workflow" eyebrow="Governance" title="Approval workflow" description="Draw the route every new idea follows. Dynamic steps come from the HR file; fixed steps go to approver groups.">
+      {message || error ? <div className={shared.notices}>
         {message ? <DismissibleNotice onDismiss={() => setMessage("")}>{message}</DismissibleNotice> : null}
         {error ? <DismissibleNotice tone="error" onDismiss={() => setError("")}>{error}</DismissibleNotice> : null}
       </div> : null}
-      {loaded ? <WorkflowRegister workflows={workflows} assignees={workflowAssignees} stages={stages} setStages={setStages} sourceVersion={sourceVersion} busy={busy} onCreate={createVersion} onEdit={editPublishedVersion} onPublish={(workflow, version) => setConfirmation({ title: `Publish version ${version.version}?`, description: "This version becomes the default contract for new ideas. The current published version will be retained as retired history.", confirmLabel: "Publish version", run: () => publishVersion(workflow, version) })} /> : <p className={register.empty}>Loading approval workflow</p>}
-      <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title ?? "Confirm action"} description={confirmation?.description ?? ""} confirmLabel={confirmation?.confirmLabel ?? "Confirm"} busyLabel="Working" busy={Boolean(busy)} onClose={() => setConfirmation(null)} onConfirm={() => void confirmAction()} />
+      {!loaded ? <p className={styles.loadingNote}>Loading the workflow</p> : !workflow ? <p className={styles.loadingNote}>No approval workflow exists for this workspace.</p> : <>
+        <div className={styles.toolbar}>
+          <div className={styles.toolbarState}>
+            {base ? <strong>Version {base.version}</strong> : <strong>New workflow</strong>}
+            {status === "unsaved" ? <StatusPill tone="warning" icon={<FilePenLine aria-hidden="true" size={14} />}>Unsaved changes</StatusPill> : status === "published" ? <StatusPill tone="success" icon={<CheckCircle2 aria-hidden="true" size={14} />}>Live</StatusPill> : status === "draft" ? <StatusPill tone="warning" icon={<FilePenLine aria-hidden="true" size={14} />}>Draft</StatusPill> : status === "retired" ? <StatusPill icon={<Archive aria-hidden="true" size={14} />}>Retired</StatusPill> : null}
+            {problems.length ? <span className={styles.toolbarProblems}>{problems.length} thing{problems.length === 1 ? "" : "s"} to fix</span> : null}
+          </div>
+          <div className={styles.toolbarActions}>
+            <button type="button" className={styles.secondary} aria-pressed={testOpen} onClick={() => setTestOpen((value) => !value)}><FlaskConical size={16} aria-hidden="true" />Test with an employee</button>
+            <button type="button" className={styles.secondary} onClick={() => void saveDraft()} disabled={busy !== "" || !dirty || problems.length > 0}><Save size={16} aria-hidden="true" />{busy === "save" ? "Saving" : "Save as draft"}</button>
+            <button type="button" className={shared.primary} disabled={busy !== "" || !canPublish} title={dirty ? "Save your changes as a draft first" : base?.status !== "draft" ? "Only a draft can be published" : undefined} onClick={() => base && setConfirmation({ title: `Publish version ${base.version}?`, description: "New ideas will follow this route. Ideas already in review keep the version they were submitted under.", confirmLabel: "Publish", run: () => publish(base) })}><Rocket size={16} aria-hidden="true" />Publish</button>
+          </div>
+        </div>
+
+        {testOpen ? <TestPanel busy={busy === "preview"} preview={preview} fresh={Boolean(previewFresh)} disabled={problems.length > 0} onRun={(employee) => void runPreview(employee)} onClear={() => setPreview(null)} /> : null}
+
+        <div className={styles.workspace}>
+          <div className={styles.canvasWrap}>
+            <WorkflowCanvas stages={stages} groups={groups} selected={selected} preview={previewFresh ? preview.steps : null} readOnly={false} onSelect={setSelected} onInsert={insert} />
+          </div>
+          <aside className={styles.inspectorWrap}>
+            {selectedIndex >= 0
+              ? <StepInspector stage={stages[selectedIndex]} index={selectedIndex} count={stages.length} groups={groups} readOnly={false} onChange={updateStage} onMove={move} onRemove={remove} />
+              : <p className={styles.inspectorEmpty}>Select a step to change it, or use + to add one.</p>}
+          </aside>
+        </div>
+
+        <section className={styles.versions} aria-labelledby="versions-title">
+          <h2 id="versions-title"><History size={16} aria-hidden="true" />Versions</h2>
+          <ol>{workflow.versions.map((version) => <li key={version.id} data-current={base?.id === version.id}>
+            <span><strong>Version {version.version}</strong><small>{version.stages.map((stage) => stage.name).join(" → ")}</small></span>
+            <span className={styles.versionMeta}>{version.status === "published" ? <StatusPill tone="success">Live</StatusPill> : version.status === "draft" ? <StatusPill tone="warning">Draft</StatusPill> : <StatusPill>Retired</StatusPill>}<time>{new Date(version.published_at ?? version.created_at).toLocaleDateString()}</time></span>
+            <button type="button" className={styles.linkButton} disabled={base?.id === version.id && !dirty} onClick={() => dirty ? setConfirmation({ title: "Discard unsaved changes?", description: `Your changes to the builder will be lost when you open version ${version.version}.`, confirmLabel: "Discard and open", run: async () => openVersion(version) }) : openVersion(version)}>{base?.id === version.id ? "Open" : "Open in builder"}</button>
+          </li>)}</ol>
+        </section>
+      </>}
+      <ConfirmDialog open={Boolean(confirmation)} title={confirmation?.title ?? "Confirm"} description={confirmation?.description ?? ""} confirmLabel={confirmation?.confirmLabel ?? "Confirm"} busyLabel="Working" busy={busy !== ""} onClose={() => setConfirmation(null)} onConfirm={async () => { if (!confirmation) return; await confirmation.run(); setConfirmation(null); }} />
     </AdminShell>
   );
 }
 
-function VersionStatus({ status }: { status: Version["status"] }) {
-  if (status === "published") return <StatusPill tone="success" icon={<CheckCircle2 aria-hidden="true" size={14} />}>Published</StatusPill>;
-  if (status === "draft") return <StatusPill tone="warning" icon={<FilePenLine aria-hidden="true" size={14} />}>Draft</StatusPill>;
-  return <StatusPill icon={<Archive aria-hidden="true" size={14} />}>Retired</StatusPill>;
-}
+function TestPanel({ busy, preview, fresh, disabled, onRun, onClear }: { busy: boolean; preview: Preview | null; fresh: boolean; disabled: boolean; onRun: (employee: DirectoryEmployee) => void; onClear: () => void }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<DirectoryEmployee[]>([]);
+  const [chosen, setChosen] = useState<DirectoryEmployee | null>(null);
+  const [searched, setSearched] = useState(false);
 
+  useEffect(() => {
+    if (chosen && query === chosen.display_name) return;
+    const timer = window.setTimeout(async () => {
+      const response = await apiRequest(`/admin/directory/employees?query=${encodeURIComponent(query)}`).catch(() => null);
+      if (response?.ok) { setResults((await response.json() as DirectoryEmployee[]).filter((employee) => employee.status !== "left").slice(0, 8)); setSearched(true); }
+    }, 200);
+    return () => window.clearTimeout(timer);
+  }, [chosen, query]);
 
-function WorkflowRegister({ workflows, assignees, stages, setStages, sourceVersion, busy, onCreate, onEdit, onPublish }: { workflows: Workflow[]; assignees: WorkflowAssignee[]; stages: Stage[]; setStages: (stages: Stage[]) => void; sourceVersion: number | null; busy: string; onCreate: (event: FormEvent<HTMLFormElement>) => Promise<void>; onEdit: (version: Version) => void; onPublish: (workflow: Workflow, version: Version) => void }) {
-  const update = (index: number, field: keyof Stage, value: string | number | boolean) => setStages(stages.map((stage, position) => position === index ? { ...stage, [field]: value } : stage));
-  const updateName = (index: number, value: string) => setStages(stages.map((stage, position) => position === index ? { ...stage, name: value, key: !stage.key || stage.key === slugify(stage.name) ? slugify(value) : stage.key } : stage));
-  return <div className={styles.workflowGrid}>
-    <SectionCard icon={<GitBranch size={17} />} title="Idea approval" description="Published versions are retained for audit and in-flight work." meta="Versioned contract">
-      {workflows.map((workflow) => <div key={workflow.id} className={styles.timeline}>{workflow.versions.map((version) => <article key={version.id} data-state={version.status}><div className={styles.versionLine}><strong>Version {version.version}</strong><VersionStatus status={version.status} /><time>{new Date(version.published_at ?? version.created_at).toLocaleDateString()}</time></div><ol>{version.stages.map((stage, index) => <li key={stage.key}><span className={styles.stageIndex} aria-hidden="true">{index + 1}</span><div><strong>{stage.name}</strong><small>{stage.assignee_name ? `${stage.assignee_name} · ${stage.assignee_email} · ${stage.assignee_status}` : `${stage.approver_role.replaceAll("_", " ")} · legacy assignment`} · {stage.sla_hours}h SLA</small></div></li>)}</ol><div className={styles.versionActions}>{version.status === "draft" ? <button type="button" onClick={() => onPublish(workflow, version)} disabled={busy !== ""}><Rocket size={15} />Publish version</button> : null}{version.status === "published" ? <button type="button" onClick={() => onEdit(version)} disabled={busy !== ""}><Pencil size={15} />Edit as new version</button> : null}</div></article>)}</div>)}
-    </SectionCard>
-    <div className={styles.builderAnchor} id="workflow-builder"><SectionCard className={styles.builder} icon={<Plus size={17} />} title={sourceVersion ? `Editing from version ${sourceVersion}` : "Create the next draft"} description={sourceVersion ? "Changes will be saved as a new draft. The published contract and ideas already using it remain unchanged." : "Assign an accountable person at every stage. Active members and pending invitees are available."} meta="Contract builder">
-      {!assignees.length ? <p className={styles.assigneeEmpty}><TriangleAlert aria-hidden="true" size={16} />Invite or activate at least one person before building a workflow.</p> : null}
-      <form onSubmit={(event) => void onCreate(event)}>{stages.map((stage, index) => <fieldset key={index}><legend>Stage {index + 1}</legend><div className={shared.field}><label htmlFor={`stage-name-${index}`}>Stage name</label><input id={`stage-name-${index}`} value={stage.name} required minLength={2} onChange={(event) => updateName(index, event.target.value)} /></div><div className={shared.field}><label htmlFor={`stage-key-${index}`}>Stable key</label><input id={`stage-key-${index}`} value={stage.key} required pattern="[a-z0-9]+(?:_[a-z0-9]+)*" onChange={(event) => update(index, "key", event.target.value)} /></div><div className={shared.field}><label htmlFor={`stage-sla-${index}`}>SLA hours</label><input id={`stage-sla-${index}`} type="number" min={1} max={8760} value={stage.sla_hours} required onChange={(event) => update(index, "sla_hours", Number(event.target.value))} /></div><SearchableSelectField id={`stage-assignee-${index}`} name={`stage-assignee-${index}`} label="Approver" value={stage.assignee_membership_id ?? ""} onChange={(value) => update(index, "assignee_membership_id", value)} disabled={!assignees.length} placeholder="Select an approver" searchPlaceholder="Search name, email, or status" emptyMessage="No active members or pending invitees match." options={assignees.map((assignee) => ({ value: assignee.membership_id, label: assignee.display_name, description: assignee.email, status: assignee.status }))} />{stages.length > 1 ? <button className={styles.removeStage} type="button" onClick={() => setStages(stages.filter((_, position) => position !== index))}><Trash2 size={14} />Remove</button> : null}</fieldset>)}<div className={styles.builderActions}><button type="button" onClick={() => setStages([...stages, emptyStage()])}><Plus size={15} />Add stage</button><button className={shared.primary} type="submit" disabled={busy !== "" || !assignees.length || stages.some((stage) => !stage.assignee_membership_id)}><GitBranch size={16} />Create draft version</button></div></form>
-    </SectionCard></div>
-  </div>;
+  return <section className={styles.testPanel} aria-label="Test the workflow with an employee">
+    <div className={styles.testSearch}>
+      <label htmlFor="test-employee">Employee from the HR directory</label>
+      <div className={styles.searchBox}>
+        <Search size={15} aria-hidden="true" />
+        <input id="test-employee" value={query} placeholder="Name, employee ID or department" onChange={(event) => { setQuery(event.target.value); setChosen(null); }} autoComplete="off" />
+        {chosen ? <button type="button" aria-label="Clear employee" onClick={() => { setChosen(null); setQuery(""); onClear(); }}><X size={14} aria-hidden="true" /></button> : null}
+      </div>
+      {!chosen && results.length ? <ul className={styles.results} role="listbox" aria-label="Matching employees">{results.map((employee) => <li key={employee.employee_id}><button type="button" role="option" aria-selected={false} onClick={() => { setChosen(employee); setQuery(employee.display_name); onRun(employee); }}>
+        <strong>{employee.display_name}</strong><small>{employee.employee_id} · {employee.department || "No department"}{employee.manager_name ? ` · RM ${employee.manager_name}` : ""}{employee.hod_name ? ` · HoD ${employee.hod_name}` : ""}</small>
+      </button></li>)}</ul> : null}
+      {!chosen && searched && !results.length ? <p className={styles.testHint}>No employees found. Load the HR file under Administration → HR directory first.</p> : null}
+    </div>
+    <div className={styles.testStatus} aria-live="polite">
+      {busy ? "Working out the route" : disabled ? "Fix the highlighted steps to test." : preview && fresh ? <>Showing the route for <strong>{preview.employee_name}</strong> on each step.</> : preview ? <><span>The route changed since the last test.</span>{chosen ? <button type="button" className={styles.linkButton} onClick={() => onRun(chosen)}>Test again</button> : null}</> : chosen ? <><span>Ready to test <strong>{chosen.display_name}</strong>.</span><button type="button" className={styles.linkButton} onClick={() => onRun(chosen)}>Test again</button></> : "Pick an employee to see who approves each step."}
+    </div>
+  </section>;
 }

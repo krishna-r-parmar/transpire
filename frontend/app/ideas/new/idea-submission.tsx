@@ -6,6 +6,7 @@ import {
   Check,
   CheckCircle2,
   CircleDollarSign,
+  Compass,
   Clock3,
   FileText,
   Gauge,
@@ -31,6 +32,8 @@ import { SelectField } from "@/components/ui/select-field";
 import { apiRequest } from "@/lib/api";
 import { useSession } from "@/lib/use-session";
 import { canContribute } from "@/lib/roles";
+import { GuidedTour, startTour, useTour } from "@/components/ui/guided-tour";
+import { submitIdeaTourSteps, SUBMIT_IDEA_TOUR_VERSION } from "./submit-idea-tour";
 import styles from "./submission.module.css";
 
 type Item = {
@@ -343,6 +346,8 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
     }
   };
 
+  const tour = useTour("submit_idea", SUBMIT_IDEA_TOUR_VERSION, Boolean(session && canContribute(session.roles) && !resumeLoading && !submitted && step === 1));
+
   const goToStep = (target: number) => {
     setError("");
     setFieldErrors({});
@@ -428,15 +433,17 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
       eyebrow={draft?.status === "needs_correction" ? "Correction requested" : draft ? "Draft idea" : undefined}
       title={draft?.status === "needs_correction" ? `Correct ${draft.reference}` : draft ? `Continue ${draft.reference}` : "Submit an idea"}
       description={draft?.status === "needs_correction" ? "Your original approval history stays unchanged." : undefined}
+      actions={<button type="button" className={styles.secondary} onClick={() => { if (step !== 1) goToStep(1); startTour("submit_idea"); }}><Compass size={16} aria-hidden="true" />How to submit</button>}
     >
       {draft?.status === "needs_correction" ? <section className={styles.correctionBanner}><RotateCcw size={20} /><div><p>Approver feedback</p><h2>Correction required before approval can continue</h2><span>{correctionReason || "Review the approval timeline for the requested correction, update the idea, and resubmit it."}</span></div><Link href={`/ideas/${draft.id}?section=approval`}>View approval history</Link></section> : null}
       <nav className={styles.stepNavigation} aria-label="Idea submission progress">
-        <ol className={styles.steps}>
+        <ol className={styles.steps} data-tour="submit-steps">
           {stepCopy.map((item, index) => {
             const number = index + 1;
             return (
               <li
                 key={item.label}
+                data-tour={`submit-step-${number}`}
                 data-active={step === number}
                 data-complete={step > number}
                 aria-current={step === number ? "step" : undefined}
@@ -466,6 +473,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
             />
 
             <FormSection
+              tour="submit-context"
               icon={<UserCircle2 size={18} />}
               title="Submission context"
               description={catalog.sites.length || catalog.departments.length ? "Where did you observe this opportunity?" : "Your name and workspace are attached automatically."}
@@ -510,6 +518,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
             </FormSection>
 
             <FormSection
+              tour="submit-type"
               icon={<Target size={18} />}
               title="Improvement type"
               description="Choose the delivery shape, not the perceived importance. Both types can create substantial value."
@@ -578,6 +587,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
             </FormSection>
 
             <FormSection
+              tour="submit-classification"
               icon={<Gauge size={18} />}
               title="Improvement classification"
               description="Category and subcategory connect the idea to TRANSPIRE’s shared Operational Excellence catalogue and unlock relevant writing guidance."
@@ -796,7 +806,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
           </button>
           <span className={styles.saved} data-saved={Boolean(draft)}>{draft ? <CheckCircle2 size={16} aria-hidden="true" /> : <Clock3 size={16} aria-hidden="true" />}{draft ? `Saved as ${draft.reference}` : "Not saved yet"}</span>
           <div>
-            <button type="button" className={styles.secondary} onClick={() => void saveDraft()} disabled={Boolean(busy)}>
+            <button type="button" className={styles.secondary} data-tour="submit-save" onClick={() => void saveDraft()} disabled={Boolean(busy)}>
               <Save size={16} />{busy === "save" ? "Saving…" : draft ? "Save changes" : "Save draft"}
             </button>
             {showContinue ? (
@@ -811,6 +821,7 @@ export function IdeaSubmission({ resumeIdeaId }: { resumeIdeaId?: string }) {
           </div>
         </footer>
       </form>
+      <GuidedTour open={tour.open} onClose={tour.close} label="Idea submission guide" steps={submitIdeaTourSteps} />
     </AdminShell>
   );
 }
@@ -819,8 +830,8 @@ function SectionHeading({ id, icon, title, description }: { id: string; icon: Re
   return <header className={styles.sectionHeading}><span>{icon}</span><div><h2 id={id}>{title}</h2><small>{description}</small></div></header>;
 }
 
-function FormSection({ icon, title, description, required = false, children }: { icon: ReactNode; title: string; description: string; required?: boolean; children: ReactNode }) {
-  return <section className={styles.formSection}><header><span>{icon}</span><div><div><h3>{title}</h3>{required ? <b>Required section</b> : null}</div><p>{description}</p></div></header><div className={styles.sectionBody}>{children}</div></section>;
+function FormSection({ icon, title, description, required = false, tour, children }: { icon: ReactNode; title: string; description: string; required?: boolean; tour?: string; children: ReactNode }) {
+  return <section className={styles.formSection} data-tour={tour}><header><span>{icon}</span><div><div><h3>{title}</h3>{required ? <b>Required section</b> : null}</div><p>{description}</p></div></header><div className={styles.sectionBody}>{children}</div></section>;
 }
 
 function Field({ label, hint, example, count, required = false, invalid = false, children }: { label: string; hint?: string; example?: string; count?: string; required?: boolean; invalid?: boolean; children: ReactNode }) {

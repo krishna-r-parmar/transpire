@@ -29,3 +29,7 @@ urs.html
 deploy/backend.env
 
 *claude*
+
+# HR employee reports (personal data): never commit
+backend/file/hrms_data/**
+!backend/file/hrms_data/.gitkeep
